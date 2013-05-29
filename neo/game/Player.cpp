@@ -1592,6 +1592,34 @@ void idPlayer::Spawn( void ) {
 			}
 		}
 	}
+    //7318 - weapontoggle - start
+    //Setup the weapon toggle lists
+	const idKeyValue *kv;
+	kv = spawnArgs.MatchPrefix( "weapontoggle", NULL );
+	while( kv ) {
+		WeaponToggle_t newToggle;
+		strcpy(newToggle.name, kv->GetKey().c_str());
+
+		idStr toggleData = kv->GetValue();
+
+		idLexer src;
+		idToken token;
+		src.LoadMemory(toggleData, toggleData.Length(), "toggleData");
+		while(1) {
+			if(!src.ReadToken(&token)) {
+				break;
+			}
+			int index = atoi(token.c_str());
+			newToggle.toggleList.Append(index);
+
+			//Skip the ,
+			src.ReadToken(&token);
+		}
+		weaponToggles.Set(newToggle.name, newToggle);
+
+		kv = spawnArgs.MatchPrefix( "weapontoggle", kv );
+	}
+    //7318 - weapontoggle - end
 }
 
 /*
@@ -1815,6 +1843,17 @@ void idPlayer::Save( idSaveGame *savefile ) const {
 		hud->SetStateString( "message", common->GetLanguageDict()->GetString( "#str_02916" ) );
 		hud->HandleNamedEvent( "Message" );
 	}
+    //7318 - weapontoggle - start
+    savefile->WriteInt(weaponToggles.Num());
+	for(i = 0; i < weaponToggles.Num(); i++) {
+		WeaponToggle_t* weaponToggle = weaponToggles.GetIndex(i);
+		savefile->WriteString(weaponToggle->name);
+		savefile->WriteInt(weaponToggle->toggleList.Num());
+		for(int j = 0; j < weaponToggle->toggleList.Num(); j++) {
+			savefile->WriteInt(weaponToggle->toggleList[j]);
+		}
+	}
+    //7318 - weapontoggle - end
 }
 
 /*
@@ -2063,6 +2102,28 @@ void idPlayer::Restore( idRestoreGame *savefile ) {
 
 	// create combat collision hull for exact collision detection
 	SetCombatModel();
+
+    //7318 - weapontoggle - start
+    int weaponToggleCount;
+	savefile->ReadInt(weaponToggleCount);
+	for(i = 0; i < weaponToggleCount; i++) {
+		WeaponToggle_t newToggle;
+		memset(&newToggle, 0, sizeof(newToggle));
+
+		idStr name;
+		savefile->ReadString(name);
+		strcpy(newToggle.name, name.c_str());
+
+		int indexCount;
+		savefile->ReadInt(indexCount);
+		for(int j = 0; j < indexCount; j++) {
+			int temp;
+			savefile->ReadInt(temp);
+			newToggle.toggleList.Append(temp);
+		}
+		weaponToggles.Set(newToggle.name, newToggle);
+	}
+    //7318 - weapontoggle - end
 }
 
 /*
@@ -3651,6 +3712,50 @@ void idPlayer::SelectWeapon( int num, bool force ) {
 		gameLocal.Printf( "Invalid weapon\n" );
 		return;
 	}
+    
+    //7318 - weapontoggle - start
+    //Is the weapon a toggle weapon
+	WeaponToggle_t* weaponToggle;
+	if(weaponToggles.Get(va("weapontoggle%d", num), &weaponToggle)) {
+
+		int weaponToggleIndex = 0;
+
+		//Find the current Weapon in the list
+		int currentIndex = -1;
+		for(int i = 0; i < weaponToggle->toggleList.Num(); i++) {
+			if(weaponToggle->toggleList[i] == idealWeapon) {
+				currentIndex = i;
+				break;
+			}
+		}
+		if(currentIndex == -1) {
+			//Didn't find the current weapon so select the first item
+			weaponToggleIndex = 0;
+		} else {
+			//Roll to the next available item in the list
+			weaponToggleIndex = currentIndex;
+			weaponToggleIndex++;
+			if(weaponToggleIndex >= weaponToggle->toggleList.Num()) {
+				weaponToggleIndex = 0;
+			}
+		}
+
+		for(int i = 0; i < weaponToggle->toggleList.Num(); i++) {
+
+			//Is it available
+			if(inventory.weapons & ( 1 << weaponToggle->toggleList[weaponToggleIndex])) {
+				break;
+			}
+
+			weaponToggleIndex++;
+			if(weaponToggleIndex >= weaponToggle->toggleList.Num()) {
+				weaponToggleIndex = 0;
+			}
+		}
+
+		num = weaponToggle->toggleList[weaponToggleIndex];
+	}
+    //7318 - weapontoggle - end
 
 	if ( force || ( inventory.weapons & ( 1 << num ) ) ) {
 		if ( !inventory.HasAmmo( weap ) && !spawnArgs.GetBool( va( "weapon%d_allowempty", num ) ) ) {
@@ -6394,11 +6499,6 @@ void idPlayer::Think( void ) {
 		}
 		gameLocal.Printf( "%d: enemies\n", num );
 	}
-
-    //neuro start    
-	// determine if portal sky is in pvs
-	gameLocal.portalSkyActive = gameLocal.pvs.CheckAreasForPortalSky( gameLocal.GetPlayerPVS(), GetPhysics()->GetOrigin() );
-	//neuro end
 }
 
 /*
@@ -7928,12 +8028,6 @@ void idPlayer::ClientPredictionThink( void ) {
 	if ( gameLocal.isNewFrame && entityNumber == gameLocal.localClientNum ) {
 		playerView.CalculateShake();
 	}
-    //neuro start
-	// determine if portal sky is in pvs
-	pvsHandle_t	clientPVS = gameLocal.pvs.SetupCurrentPVS( GetPVSAreas(), GetNumPVSAreas() );
-	gameLocal.portalSkyActive = gameLocal.pvs.CheckAreasForPortalSky( clientPVS, GetPhysics()->GetOrigin() );
-	gameLocal.pvs.FreeCurrentPVS( clientPVS );
-	//neuro end
 }
 
 /*

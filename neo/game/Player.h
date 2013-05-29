@@ -122,6 +122,13 @@ enum {
 	INFLUENCE_LEVEL3,			// slow player movement
 };
 
+// 7318 - weapontoggle - start
+typedef struct {
+	char		name[64];
+	idList<int>	toggleList;
+} WeaponToggle_t;
+// 7318 - weapontoggle - end
+
 class idInventory {
 public:
 	int						maxHealth;
@@ -617,6 +624,8 @@ private:
 	bool					smoothedOriginUpdated;
 	idVec3					smoothedOrigin;
 	idAngles				smoothedAngles;
+
+    idHashTable<WeaponToggle_t>	weaponToggles; // 7318 - weapontoggle
 
 	// mp
 	bool					ready;					// from userInfo
