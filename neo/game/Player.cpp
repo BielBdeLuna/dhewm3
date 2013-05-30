@@ -7466,7 +7466,15 @@ void idPlayer::CalculateRenderView( void ) {
 				renderView->viewID = entityNumber + 1;
 			}
 		} else if ( pm_thirdPerson.GetBool() ) {
-			OffsetThirdPersonView( pm_thirdPersonAngle.GetFloat(), pm_thirdPersonRange.GetFloat(), pm_thirdPersonHeight.GetFloat(), pm_thirdPersonClip.GetBool() );
+            // 7318 - vehicle - start
+            if ( GetBindMaster() && GetBindMaster()->IsType( idAFEntity_Vehicle::Type ) ) {
+                // the player IS in the car, so pm_thirdperson... vehicle values are used
+                OffsetThirdPersonView( pm_thirdPersonAngle.GetFloat(), pm_thirdPersonVehicleRange.GetFloat(), pm_thirdPersonVehicleHeight.GetFloat(), pm_thirdPersonClip.GetBool() );
+            } else {
+                // the player IS NOT in the car, so pm_thirdperson... normal values are used
+			    OffsetThirdPersonView( pm_thirdPersonAngle.GetFloat(), pm_thirdPersonRange.GetFloat(), pm_thirdPersonHeight.GetFloat(), pm_thirdPersonClip.GetBool() );
+            }
+            // 7318 - vehicle - end
 		} else if ( pm_thirdPersonDeath.GetBool() ) {
 			range = gameLocal.time < minRespawnTime ? ( gameLocal.time + RAGDOLL_DEATH_TIME - minRespawnTime ) * ( 120.0f / RAGDOLL_DEATH_TIME ) : 120.0f;
 			OffsetThirdPersonView( 0.0f, 20.0f + range, 0.0f, false );

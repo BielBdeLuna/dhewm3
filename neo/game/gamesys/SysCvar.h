@@ -196,6 +196,8 @@ extern idCVar	pm_thirdPersonAngle;
 extern idCVar	pm_thirdPersonClip;
 extern idCVar	pm_thirdPerson;
 extern idCVar	pm_thirdPersonDeath;
+extern idCVar	pm_thirdPersonVehicleRange; // 7318 - vehicle
+extern idCVar	pm_thirdPersonVehicleHeight; // 7318 - vehicle
 extern idCVar	pm_modelView;
 extern idCVar	pm_airTics;
 
