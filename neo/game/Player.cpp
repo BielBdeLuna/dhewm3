@@ -5636,6 +5636,21 @@ void idPlayer::UseVehicle( void ) {
 	}
 }
 
+// 7318 - vehicles - start
+/*
+==============
+idPlayer::VehicleHorn
+==============
+*/
+void idPlayer::VehicleHorn( void ) {
+	//gameLocal.Printf( "it works!\n" ); //debug
+	if ( GetBindMaster() && GetBindMaster()->IsType( idAFEntity_Vehicle::Type ) ) {
+        //gameLocal.Printf( "calling horn!\n" ); //debug
+		static_cast<idAFEntity_Vehicle*>(GetBindMaster())->SoundHorn();
+	} 
+}
+// 7318 - vehicles - end
+
 /*
 ==============
 idPlayer::PerformImpulse
@@ -5722,6 +5737,12 @@ void idPlayer::PerformImpulse( int impulse ) {
 			UseVehicle();
 			break;
 		}
+        // 7318 - vehicles - start
+        case IMPULSE_41: {
+			VehicleHorn();
+			break;
+		}
+        // 7318 - vehicles - end
 	}
 }
 

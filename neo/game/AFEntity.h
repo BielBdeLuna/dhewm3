@@ -327,6 +327,10 @@ public:
 
 	void					Spawn( void );
 	void					Use( idPlayer *player );
+    // 7318 - vehicle - start
+    void                    SoundHorn( void );
+    void                    ToggleHeadlights( void );
+    // 7318 - vehicle - end
 
 protected:
 	idPlayer *				player;
@@ -336,8 +340,12 @@ protected:
 	float					steerAngle;
 	float					steerSpeed;
 	const idDeclParticle *	dustSmoke;
+    
 
 	float					GetSteerAngle( void );
+    
+    bool                    engine; // 7318 - vehicle
+    
 };
 
 

@@ -1599,6 +1599,7 @@ idAFEntity_Vehicle::idAFEntity_Vehicle( void ) {
 	steerAngle			= 0.0f;
 	steerSpeed			= 0.0f;
 	dustSmoke			= NULL;
+    engine              = false; // 7318 - vehicles
 }
 
 /*
@@ -1632,6 +1633,7 @@ void idAFEntity_Vehicle::Spawn( void ) {
 
 	player = NULL;
 	steerAngle = 0.0f;
+    engine = false; // 7318 - vehicles
 
 	const char *smokeName = spawnArgs.GetString( "smoke_vehicle_dust", "muzzlesmoke" );
 	if ( *smokeName != '\0' ) {
@@ -1650,6 +1652,10 @@ void idAFEntity_Vehicle::Use( idPlayer *other ) {
 
 	if ( player ) {
 		if ( player == other ) {
+            StopSound(SND_CHANNEL_ANY, NULL); // 7318 - vehicles
+            //FadeSound(SND_CHANNEL_ANY, -96, 1); // 7318 - vehicles
+            StartSound( "snd_stop_engine", SND_CHANNEL_VOICE, 0, false, NULL ); // 7318 - vehicles
+            engine = false; // 7318 - vehicles
 			other->Unbind();
 			player = NULL;
 
@@ -1657,6 +1663,10 @@ void idAFEntity_Vehicle::Use( idPlayer *other ) {
 		}
 	}
 	else {
+        StartSound( "snd_start_engine", SND_CHANNEL_VOICE, 0, false, NULL ); // 7318 - vehicles
+        StartSound( "snd_engine_idle", SND_CHANNEL_VOICE2, 0, false, NULL ); // 7318 - vehicles
+        engine = true; // 7318 - vehicles
+        gameLocal.Printf( "engine is idle\n" );
 		player = other;
 		animator.GetJointTransform( eyesJoint, gameLocal.time, origin, axis );
 		origin = renderEntity.origin + origin * renderEntity.axis;
@@ -1690,6 +1700,25 @@ float idAFEntity_Vehicle::GetSteerAngle( void ) {
 	return steerAngle;
 }
 
+//7318 - vehicles - start
+/*
+================
+idAFEntity_Vehicle::SoundHorn
+================
+*/
+void idAFEntity_Vehicle::SoundHorn( void ) {
+    //gameLocal.Printf( "performing horn!\n" ); //debug
+    StartSound( "snd_horn", SND_CHANNEL_ANY, 0, false, NULL );
+}
+/*
+================
+idAFEntity_Vehicle::ToggleHeadlights
+================
+*/
+void idAFEntity_Vehicle::ToggleHeadlights( void ) {
+    StartSound( "snd_alarm", SND_CHANNEL_VOICE, 0, false, NULL ); //FIXME very much
+}
+//7318 - vehicles - end
 
 /*
 ===============================================================================
@@ -2170,7 +2199,6 @@ void idAFEntity_VehicleSixWheels::Think( void ) {
 	idRotation rotation;
 
 	if ( thinkFlags & TH_THINK ) {
-
 		if ( player ) {
 			// capture the input from a player
 			velocity = g_vehicleVelocity.GetFloat();
@@ -2179,7 +2207,9 @@ void idAFEntity_VehicleSixWheels::Think( void ) {
 			}
 			force = idMath::Fabs( player->usercmd.forwardmove * g_vehicleForce.GetFloat() ) * (1.0f / 128.0f);
 			steerAngle = GetSteerAngle();
-		}
+        
+            
+		}        
 
 		// update the wheel motor force
 		for ( i = 0; i < 6; i++ ) {
