@@ -343,8 +343,20 @@ protected:
     
 
 	float					GetSteerAngle( void );
+
+    // 7318 - vehicle - start
+
+    //instead of a cvar controlling all cars, let's not be interventionist here...
+    float                   veh_velocity;           //"1000"
+    float                   veh_force;              //"50000" // yes, in the origianl cvars thesw are all floats!
+    float                   veh_suspensionUp;       //"32"
+    float                   veh_suspensionDown;     //"20"
+    float                   veh_suspensionKCompress;//"200"
+    float                   veh_suspensionDamping;  //"400"
+    float                   veh_tireFriction;       //"0.8"
     
-    bool                    engine; // 7318 - vehicle
+    bool                    engine;                 // is engine on or off?
+    // 7318 - vehicle - end
     
 };
 

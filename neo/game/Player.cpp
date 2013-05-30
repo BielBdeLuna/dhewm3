@@ -5622,6 +5622,9 @@ void idPlayer::UseVehicle( void ) {
 	if ( GetBindMaster() && GetBindMaster()->IsType( idAFEntity_Vehicle::Type ) ) {
 		Show();
 		static_cast<idAFEntity_Vehicle*>(GetBindMaster())->Use( this );
+        /*if ( weapon.GetEntity()->IsReady() ) { // 7318 - FIXME
+            weapon.GetEntity()->LowerWeapon();
+        }  */      
 	} else {
 		start = GetEyePosition();
 		end = start + viewAngles.ToForward() * 80.0f;
@@ -5631,6 +5634,9 @@ void idPlayer::UseVehicle( void ) {
 			if ( ent && ent->IsType( idAFEntity_Vehicle::Type ) ) {
 				Hide();
 				static_cast<idAFEntity_Vehicle*>(ent)->Use( this );
+                /*if ( weapon.GetEntity()->IsHolstered() ) { // 7318 - FIXME
+                    weapon.GetEntity()->RaiseWeapon();
+                }*/ 
 			}
 		}
 	}

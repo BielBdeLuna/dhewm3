@@ -1599,7 +1599,18 @@ idAFEntity_Vehicle::idAFEntity_Vehicle( void ) {
 	steerAngle			= 0.0f;
 	steerSpeed			= 0.0f;
 	dustSmoke			= NULL;
+
+    // 7318 - vehicle - start
     engine              = false; // 7318 - vehicles
+
+    veh_velocity            = 1000;
+    veh_force               = 50000;
+    veh_suspensionUp        = 32;
+    veh_suspensionDown      = 20;
+    veh_suspensionKCompress = 200;
+    veh_suspensionDamping   = 400;
+    veh_tireFriction        = 0.8;
+    // 7318 - vehicle - end
 }
 
 /*
@@ -1630,6 +1641,18 @@ void idAFEntity_Vehicle::Spawn( void ) {
 
 	spawnArgs.GetFloat( "wheelRadius", "20", wheelRadius );
 	spawnArgs.GetFloat( "steerSpeed", "5", steerSpeed );
+
+    // 7318 - vehicles - start
+
+    spawnArgs.GetFloat( "velocity", "1000", veh_velocity );
+    spawnArgs.GetFloat( "force", "50000", veh_force );
+    spawnArgs.GetFloat( "suspensionUp", "32", veh_suspensionUp );
+    spawnArgs.GetFloat( "suspensionDown", "20", veh_suspensionDown );
+    spawnArgs.GetFloat( "suspensionKCompress", "200", veh_suspensionKCompress );
+    spawnArgs.GetFloat( "suspensionDamping", "400", veh_suspensionDamping );
+    spawnArgs.GetFloat( "tireFriction", "0.8", veh_tireFriction );
+    // 7318 - vehicles - start
+    
 
 	player = NULL;
 	steerAngle = 0.0f;
@@ -1666,7 +1689,7 @@ void idAFEntity_Vehicle::Use( idPlayer *other ) {
         StartSound( "snd_start_engine", SND_CHANNEL_VOICE, 0, false, NULL ); // 7318 - vehicles
         StartSound( "snd_engine_idle", SND_CHANNEL_VOICE2, 0, false, NULL ); // 7318 - vehicles
         engine = true; // 7318 - vehicles
-        gameLocal.Printf( "engine is idle\n" );
+        //gameLocal.Printf( "engine is idle\n" ); //7318 - debug
 		player = other;
 		animator.GetJointTransform( eyesJoint, gameLocal.time, origin, axis );
 		origin = renderEntity.origin + origin * renderEntity.axis;
@@ -1791,11 +1814,13 @@ void idAFEntity_VehicleSimple::Spawn( void ) {
 
 		suspension[i] = new idAFConstraint_Suspension();
 		suspension[i]->Setup( va( "suspension%d", i ), af.GetPhysics()->GetBody( 0 ), origin, af.GetPhysics()->GetAxis( 0 ), wheelModel );
-		suspension[i]->SetSuspension(	g_vehicleSuspensionUp.GetFloat(),
-										g_vehicleSuspensionDown.GetFloat(),
-										g_vehicleSuspensionKCompress.GetFloat(),
-										g_vehicleSuspensionDamping.GetFloat(),
-										g_vehicleTireFriction.GetFloat() );
+         // 7318 - vehicle - start
+		suspension[i]->SetSuspension(	veh_suspensionUp,
+										veh_suspensionDown,
+										veh_suspensionKCompress,
+										veh_suspensionDamping,
+										veh_tireFriction );
+         // 7318 - vehicle - end
 
 		af.GetPhysics()->AddConstraint( suspension[i] );
 	}
@@ -1820,11 +1845,11 @@ void idAFEntity_VehicleSimple::Think( void ) {
 
 		if ( player ) {
 			// capture the input from a player
-			velocity = g_vehicleVelocity.GetFloat();
+			velocity = veh_velocity;  // 7318 - moded
 			if ( player->usercmd.forwardmove < 0 ) {
 				velocity = -velocity;
 			}
-			force = idMath::Fabs( player->usercmd.forwardmove * g_vehicleForce.GetFloat() ) * (1.0f / 128.0f);
+			force = idMath::Fabs( player->usercmd.forwardmove * veh_force ) * (1.0f / 128.0f);  // 7318 - moded
 			steerAngle = GetSteerAngle();
 		}
 
@@ -1853,11 +1878,13 @@ void idAFEntity_VehicleSimple::Think( void ) {
 
 		// update suspension with latest cvar settings
 		for ( i = 0; i < 4; i++ ) {
-			suspension[i]->SetSuspension(	g_vehicleSuspensionUp.GetFloat(),
-											g_vehicleSuspensionDown.GetFloat(),
-											g_vehicleSuspensionKCompress.GetFloat(),
-											g_vehicleSuspensionDamping.GetFloat(),
-											g_vehicleTireFriction.GetFloat() );
+             // 7318 - vehicle - start
+			suspension[i]->SetSuspension(	veh_suspensionUp,
+										    veh_suspensionDown,
+										    veh_suspensionKCompress,
+										    veh_suspensionDamping,
+										    veh_tireFriction );
+             // 7318 - vehicle - end
 		}
 
 		// run the physics
@@ -2018,11 +2045,11 @@ void idAFEntity_VehicleFourWheels::Think( void ) {
 
 		if ( player ) {
 			// capture the input from a player
-			velocity = g_vehicleVelocity.GetFloat();
+			velocity = veh_velocity;  // 7318 - moded
 			if ( player->usercmd.forwardmove < 0 ) {
 				velocity = -velocity;
 			}
-			force = idMath::Fabs( player->usercmd.forwardmove * g_vehicleForce.GetFloat() ) * (1.0f / 128.0f);
+			force = idMath::Fabs( player->usercmd.forwardmove * veh_force ) * (1.0f / 128.0f); // 7318 - moded
 			steerAngle = GetSteerAngle();
 		}
 
@@ -2201,11 +2228,18 @@ void idAFEntity_VehicleSixWheels::Think( void ) {
 	if ( thinkFlags & TH_THINK ) {
 		if ( player ) {
 			// capture the input from a player
-			velocity = g_vehicleVelocity.GetFloat();
+			velocity = veh_velocity; // 7318 - moded
 			if ( player->usercmd.forwardmove < 0 ) {
 				velocity = -velocity;
 			}
-			force = idMath::Fabs( player->usercmd.forwardmove * g_vehicleForce.GetFloat() ) * (1.0f / 128.0f);
+            // 7318 - vehicle - start
+            if ( player->usercmd.upmove > 0 ) {
+                velocity = -velocity;
+                force = 0.0f;
+            }else{
+                force = idMath::Fabs( player->usercmd.forwardmove * veh_force ) * (1.0f / 128.0f); // 7318 - moded
+            }
+            // 7318 - vehicle - end
 			steerAngle = GetSteerAngle();
         
             
