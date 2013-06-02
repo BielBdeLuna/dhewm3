@@ -1574,6 +1574,7 @@ void idAFEntity_WithAttachedHead::Event_Activate( idEntity *activator ) {
 	}
 }
 
+// 7318 - vehicle - start
 
 /*
 ===============================================================================
@@ -1594,23 +1595,7 @@ idAFEntity_Vehicle::idAFEntity_Vehicle
 idAFEntity_Vehicle::idAFEntity_Vehicle( void ) {
 	player				= NULL;
 	eyesJoint			= INVALID_JOINT;
-	steeringWheelJoint	= INVALID_JOINT;
-	wheelRadius			= 0.0f;
-	steerAngle			= 0.0f;
-	steerSpeed			= 0.0f;
-	dustSmoke			= NULL;
 
-    // 7318 - vehicle - start
-    engine              = false; // 7318 - vehicles
-
-    veh_velocity            = 1000;
-    veh_force               = 50000;
-    veh_suspensionUp        = 32;
-    veh_suspensionDown      = 20;
-    veh_suspensionKCompress = 200;
-    veh_suspensionDamping   = 400;
-    veh_tireFriction        = 0.8;
-    // 7318 - vehicle - end
 }
 
 /*
@@ -1620,7 +1605,144 @@ idAFEntity_Vehicle::Spawn
 */
 void idAFEntity_Vehicle::Spawn( void ) {
 	const char *eyesJointName = spawnArgs.GetString( "eyesJoint", "eyes" );
+
+	LoadAF();
+
+	SetCombatModel();
+
+	SetPhysics( af.GetPhysics() );
+
+	fl.takedamage = true;
+
+	if ( !eyesJointName[0] ) {
+		gameLocal.Error( "idAFEntity_Vehicle '%s' no eyes joint specified", name.c_str() );
+	}
+	eyesJoint = animator.GetJointHandle( eyesJointName );
+    
+
+	player = NULL;
+}
+
+/*
+================
+idAFEntity_Vehicle::Use
+================
+*/
+void idAFEntity_Vehicle::Use( idPlayer *other ) {
+	idVec3 origin;
+	idMat3 axis;
+
+	if ( player ) {
+		if ( player == other ) {
+            other->Unbind();
+			player = NULL;
+
+			af.GetPhysics()->SetComeToRest( true );
+		}
+	}
+	else {
+		player = other;
+		animator.GetJointTransform( eyesJoint, gameLocal.time, origin, axis );
+		origin = renderEntity.origin + origin * renderEntity.axis;
+		player->GetPhysics()->SetOrigin( origin );
+		player->BindToBody( this, 0, true );
+
+		af.GetPhysics()->SetComeToRest( false );
+		af.GetPhysics()->Activate();
+	}
+}
+/*
+================
+idAFEntity_Vehicle::GetGlobalJointTransform
+
+This returns the offset and axis of a weapon bone in world space, suitable for attaching models or lights
+================
+*/
+/*
+bool idAFEntity_Vehicle::GetGlobalJointTransform( const jointHandle_t jointHandle, idVec3 &offset, idMat3 &axis ) {*/
+    /*
+    if ( worldModel.GetEntity() && worldModel.GetEntity()->GetAnimator()->GetJointTransform( jointHandle, gameLocal.time, offset, axis ) ) {
+			offset = worldModel.GetEntity()->GetPhysics()->GetOrigin() + offset * worldModel.GetEntity()->GetPhysics()->GetAxis();
+			axis = axis * worldModel.GetEntity()->GetPhysics()->GetAxis();
+			return true;
+	}
+    */
+/*
+    if ( this.GetEntity() && worldModel.GetEntity()->GetAnimator()->GetJointTransform( jointHandle, gameLocal.time, offset, axis ) ) {
+			offset = this.GetEntity()->GetPhysics()->GetOrigin() + offset * this.GetEntity()->GetPhysics()->GetAxis();
+			axis = axis * this.GetEntity()->GetPhysics()->GetAxis();
+			return true;
+	}
+	offset = viewWeaponOrigin;  //?
+	axis = viewWeaponAxis;      //?
+	return false;
+}
+*/
+
+/*
+===============================================================================
+
+  idAFEntity_Wheeled_Vehicle
+
+===============================================================================
+*/
+
+CLASS_DECLARATION( idAFEntity_Base, idAFEntity_Wheeled_Vehicle )
+END_CLASS
+
+/*
+================
+idAFEntity_Wheeled_Vehicle::idAFEntity_Wheeled_Vehicle
+================
+*/
+idAFEntity_Wheeled_Vehicle::idAFEntity_Wheeled_Vehicle( void ) {
+	player				= NULL;
+	eyesJoint			= INVALID_JOINT;
+	steeringWheelJoint	= INVALID_JOINT;
+    headlightsJoint		= INVALID_JOINT;
+	wheelRadius			= 0.0f;
+	steerAngle			= 0.0f;
+	steerSpeed			= 0.0f;
+	dustSmoke			= NULL;
+
+    acceleration        = 0.0f;    
+    engine              = false;
+    handbrake           = false;
+    backwards           = false;
+
+    headlights          = false;
+    taillights          = false;
+    blinklights         = false;
+
+    //vehicle individual lights status
+    headlight_l         = 0;
+    headlight_r         = 0;
+    taillight_l         = 0;
+    taillight_r         = 0;
+    blinklight_l        = 0;
+    blinklight_r        = 0;
+    
+    //vehicle physical capabilities
+    veh_velocity            = 1000;
+    veh_force               = 50000;
+    veh_suspensionUp        = 32;
+    veh_suspensionDown      = 20;
+    veh_suspensionKCompress = 200;
+    veh_suspensionDamping   = 400;
+    veh_tireFriction        = 0.8;
+    
+}
+
+/*
+================
+idAFEntity_Wheeled_Vehicle::Spawn
+================
+*/
+void idAFEntity_Wheeled_Vehicle::Spawn( void ) {
+    const char *shader;
+	const char *eyesJointName = spawnArgs.GetString( "eyesJoint", "eyes" );
 	const char *steeringWheelJointName = spawnArgs.GetString( "steeringWheelJoint", "steeringWheel" );
+    //const char *headlightsJointName = spawnArgs.GetString( "headlightsJoint", "mid_headlight" );
 
 	LoadAF();
 
@@ -1642,8 +1764,6 @@ void idAFEntity_Vehicle::Spawn( void ) {
 	spawnArgs.GetFloat( "wheelRadius", "20", wheelRadius );
 	spawnArgs.GetFloat( "steerSpeed", "5", steerSpeed );
 
-    // 7318 - vehicles - start
-
     spawnArgs.GetFloat( "velocity", "1000", veh_velocity );
     spawnArgs.GetFloat( "force", "50000", veh_force );
     spawnArgs.GetFloat( "suspensionUp", "32", veh_suspensionUp );
@@ -1651,12 +1771,62 @@ void idAFEntity_Vehicle::Spawn( void ) {
     spawnArgs.GetFloat( "suspensionKCompress", "200", veh_suspensionKCompress );
     spawnArgs.GetFloat( "suspensionDamping", "400", veh_suspensionDamping );
     spawnArgs.GetFloat( "tireFriction", "0.8", veh_tireFriction );
-    // 7318 - vehicles - start
-    
+
+    spawnArgs.GetBool( "engine", "0", engine);
+    spawnArgs.GetBool( "headlights", "0", headlights);
+
+    taillights = false;
+    blinklights = false;
+    handbrake = false;
+    backwards = false;  
 
 	player = NULL;
 	steerAngle = 0.0f;
-    engine = false; // 7318 - vehicles
+
+    //LIGHT
+    
+	headlightsJoint = animator.GetJointHandle( spawnArgs.GetString( "headlightsJoint", "mid_headlight" ) );
+
+    const idMaterial*headlightsShader;
+	idVec3			headlightsTarget;
+	idVec3			headlightsUp;
+	idVec3			headlightsRight;
+	float			headlightsRadius;
+	bool			headlightsPointLight;
+
+	spawnArgs.GetString( "mtr_flashShader", "", &shader );
+	headlightsShader = declManager->FindMaterial( shader, false );
+	headlightsPointLight = spawnArgs.GetBool( "flashPointLight", "1" );
+	spawnArgs.GetVector( "flashColor", "0 0 0", headlightsColor );
+	headlightsRadius		= (float)spawnArgs.GetInt( "flashRadius" );	// if 0, no light will spawn
+	headlightsTime          = SEC2MS( spawnArgs.GetFloat( "flashTime", "0.25" ) );
+	headlightsTarget		= spawnArgs.GetVector( "flashTarget" );
+	headlightsUp			= spawnArgs.GetVector( "flashUp" );
+	headlightsRight         = spawnArgs.GetVector( "flashRight" );
+
+    memset( &headlights_l, 0, sizeof( headlights_l ) );
+
+    headlights_l.pointLight								= headlightsPointLight;
+	headlights_l.shader									= headlightsShader;
+	headlights_l.shaderParms[ SHADERPARM_RED ]			= headlightsColor[0];
+	headlights_l.shaderParms[ SHADERPARM_GREEN ]		= headlightsColor[1];
+	headlights_l.shaderParms[ SHADERPARM_BLUE ]			= headlightsColor[2];
+	headlights_l.shaderParms[ SHADERPARM_TIMESCALE ]	= 1.0f;
+
+	headlights_l.lightRadius[0]							= headlightsRadius;
+	headlights_l.lightRadius[1]							= headlightsRadius;
+	headlights_l.lightRadius[2]							= headlightsRadius;
+
+	if ( !headlightsPointLight ) {
+		headlights_l.target								= headlightsTarget;
+		headlights_l.up									= headlightsUp;
+		headlights_l.right								= headlightsRight;
+		headlights_l.end								= headlightsTarget;
+	}
+
+    if ( engine == true ) {
+        StartSound( "snd_engine_idle", SND_CHANNEL_BODY, 0, false, NULL );
+    }
 
 	const char *smokeName = spawnArgs.GetString( "smoke_vehicle_dust", "muzzlesmoke" );
 	if ( *smokeName != '\0' ) {
@@ -1666,31 +1836,24 @@ void idAFEntity_Vehicle::Spawn( void ) {
 
 /*
 ================
-idAFEntity_Vehicle::Use
+idAFEntity_Wheeled_Vehicle::Use
 ================
 */
-void idAFEntity_Vehicle::Use( idPlayer *other ) {
+void idAFEntity_Wheeled_Vehicle::Use( idPlayer *other ) {
 	idVec3 origin;
 	idMat3 axis;
 
 	if ( player ) {
 		if ( player == other ) {
-            StopSound(SND_CHANNEL_ANY, NULL); // 7318 - vehicles
-            //FadeSound(SND_CHANNEL_ANY, -96, 1); // 7318 - vehicles
-            StartSound( "snd_stop_engine", SND_CHANNEL_VOICE, 0, false, NULL ); // 7318 - vehicles
-            engine = false; // 7318 - vehicles
-			other->Unbind();
+            handbrake = false;
+            other->Unbind();
 			player = NULL;
 
 			af.GetPhysics()->SetComeToRest( true );
 		}
 	}
 	else {
-        StartSound( "snd_start_engine", SND_CHANNEL_VOICE, 0, false, NULL ); // 7318 - vehicles
-        StartSound( "snd_engine_idle", SND_CHANNEL_VOICE2, 0, false, NULL ); // 7318 - vehicles
-        engine = true; // 7318 - vehicles
-        //gameLocal.Printf( "engine is idle\n" ); //7318 - debug
-		player = other;
+        player = other;
 		animator.GetJointTransform( eyesJoint, gameLocal.time, origin, axis );
 		origin = renderEntity.origin + origin * renderEntity.axis;
 		player->GetPhysics()->SetOrigin( origin );
@@ -1703,10 +1866,10 @@ void idAFEntity_Vehicle::Use( idPlayer *other ) {
 
 /*
 ================
-idAFEntity_Vehicle::GetSteerAngle
+idAFEntity_Wheeled_Vehicle::GetSteerAngle
 ================
 */
-float idAFEntity_Vehicle::GetSteerAngle( void ) {
+float idAFEntity_Wheeled_Vehicle::GetSteerAngle( void ) {
 	float idealSteerAngle, angleDelta;
 
 	idealSteerAngle = player->usercmd.rightmove * ( 30.0f / 128.0f );
@@ -1723,25 +1886,81 @@ float idAFEntity_Vehicle::GetSteerAngle( void ) {
 	return steerAngle;
 }
 
-//7318 - vehicles - start
 /*
 ================
-idAFEntity_Vehicle::SoundHorn
+idAFEntity_Wheeled_Vehicle::GetAcceleration
+
+this should be useful for the sound of the motor
 ================
 */
-void idAFEntity_Vehicle::SoundHorn( void ) {
+float idAFEntity_Wheeled_Vehicle::GetAcceleration( float vel ) {
+	//TODO in order to get the acceleration what do I have to do?
+    
+	return acceleration;
+}
+
+/*
+================
+idAFEntity_Wheeled_Vehicle::SoundHorn
+================
+*/
+void idAFEntity_Wheeled_Vehicle::SoundHorn( void ) {
     //gameLocal.Printf( "performing horn!\n" ); //debug
     StartSound( "snd_horn", SND_CHANNEL_ANY, 0, false, NULL );
 }
 /*
 ================
-idAFEntity_Vehicle::ToggleHeadlights
+idAFEntity_Wheeled_Vehicle::ToggleHeadlights
 ================
 */
-void idAFEntity_Vehicle::ToggleHeadlights( void ) {
-    StartSound( "snd_alarm", SND_CHANNEL_VOICE, 0, false, NULL ); //FIXME very much
+void idAFEntity_Wheeled_Vehicle::ToggleHeadlights( void ) {
+    //StartSound( "snd_alarm", SND_CHANNEL_ANY, 0, false, NULL ); //FIXME very much
+
+    if ( headlights == false ) {
+        gameLocal.Printf( "lights ON\n" ); //debug
+        if ( headlight_l == -1 ) { //7318 the light is broken
+            headlight_l = 0;
+        }else{
+            headlight_l = 1;
+        }
+
+        if ( headlight_r == -1  ) { //7318 the light is broken
+            headlight_r = 0;
+        }else{
+            headlight_r = 1;
+        }
+        headlights = true;
+    }else{
+        gameLocal.Printf( "lights OFF\n" ); //debug
+        headlight_l = 0;
+        headlight_r = 0;
+        headlights = false;
+    }
+        
 }
-//7318 - vehicles - end
+
+/*
+================
+idAFEntity_Wheeled_Vehicle::ToggleEngine
+================
+*/
+void idAFEntity_Wheeled_Vehicle::ToggleEngine( void ) {
+
+    if ( engine == true ) {
+        gameLocal.Printf( "engine OFF\n" ); //debug
+        StopSound(SND_CHANNEL_BODY, NULL);
+        //FadeSound(SND_CHANNEL_ANY, -96, 1);
+        StartSound( "snd_stop_engine", SND_CHANNEL_VOICE, 0, false, NULL );
+        engine = false;
+        
+    }else{
+        gameLocal.Printf( "lights ON\n" ); //debug
+        StartSound( "snd_start_engine", SND_CHANNEL_VOICE, 0, false, NULL );
+        StartSound( "snd_engine_idle", SND_CHANNEL_BODY, 0, false, NULL );
+        engine = true;
+    }
+        
+}
 
 /*
 ===============================================================================
@@ -1751,7 +1970,7 @@ void idAFEntity_Vehicle::ToggleHeadlights( void ) {
 ===============================================================================
 */
 
-CLASS_DECLARATION( idAFEntity_Vehicle, idAFEntity_VehicleSimple )
+CLASS_DECLARATION( idAFEntity_Wheeled_Vehicle, idAFEntity_VehicleSimple )
 END_CLASS
 
 /*
@@ -1814,13 +2033,11 @@ void idAFEntity_VehicleSimple::Spawn( void ) {
 
 		suspension[i] = new idAFConstraint_Suspension();
 		suspension[i]->Setup( va( "suspension%d", i ), af.GetPhysics()->GetBody( 0 ), origin, af.GetPhysics()->GetAxis( 0 ), wheelModel );
-         // 7318 - vehicle - start
 		suspension[i]->SetSuspension(	veh_suspensionUp,
 										veh_suspensionDown,
 										veh_suspensionKCompress,
 										veh_suspensionDamping,
 										veh_tireFriction );
-         // 7318 - vehicle - end
 
 		af.GetPhysics()->AddConstraint( suspension[i] );
 	}
@@ -1878,13 +2095,11 @@ void idAFEntity_VehicleSimple::Think( void ) {
 
 		// update suspension with latest cvar settings
 		for ( i = 0; i < 4; i++ ) {
-             // 7318 - vehicle - start
 			suspension[i]->SetSuspension(	veh_suspensionUp,
 										    veh_suspensionDown,
 										    veh_suspensionKCompress,
 										    veh_suspensionDamping,
 										    veh_tireFriction );
-             // 7318 - vehicle - end
 		}
 
 		// run the physics
@@ -1948,7 +2163,7 @@ void idAFEntity_VehicleSimple::Think( void ) {
 ===============================================================================
 */
 
-CLASS_DECLARATION( idAFEntity_Vehicle, idAFEntity_VehicleFourWheels )
+CLASS_DECLARATION( idAFEntity_Wheeled_Vehicle, idAFEntity_VehicleFourWheels )
 END_CLASS
 
 
@@ -2125,7 +2340,7 @@ void idAFEntity_VehicleFourWheels::Think( void ) {
 ===============================================================================
 */
 
-CLASS_DECLARATION( idAFEntity_Vehicle, idAFEntity_VehicleSixWheels )
+CLASS_DECLARATION( idAFEntity_Wheeled_Vehicle, idAFEntity_VehicleSixWheels )
 END_CLASS
 
 	/*
@@ -2230,21 +2445,38 @@ void idAFEntity_VehicleSixWheels::Think( void ) {
 			// capture the input from a player
 			velocity = veh_velocity; // 7318 - moded
 			if ( player->usercmd.forwardmove < 0 ) {
+                // backwards
 				velocity = -velocity;
-			}
-            // 7318 - vehicle - start
+                //if ( ( backwards == false ) && ( engine == true ) && ( handbrake == false ) ) {
+                if ( ( backwards == false ) && ( engine == true ) ) {
+                    StartSound( "snd_alarm", SND_CHANNEL_DEMONIC, 0, false, NULL );
+                }
+                backwards = true;
+			} else {
+                StopSound(SND_CHANNEL_DEMONIC, NULL);
+                backwards = false;
+            }       
+            
             if ( player->usercmd.upmove > 0 ) {
-                velocity = -velocity;
+                //stop the car because we're handbreaking
+                if ( handbrake == false ) {
+                    StartSound( "snd_handbrake", SND_CHANNEL_VOICE, 0, false, NULL );
+                }
+                handbrake = true;
                 force = 0.0f;
             }else{
-                force = idMath::Fabs( player->usercmd.forwardmove * veh_force ) * (1.0f / 128.0f); // 7318 - moded
+                handbrake = false;
+                if (engine == true ) {
+                    force = idMath::Fabs( player->usercmd.forwardmove * veh_force ) * (1.0f / 128.0f); // 7318 - moded
+                }
             }
-            // 7318 - vehicle - end
 			steerAngle = GetSteerAngle();
-        
-            
-		}        
-
+        }
+        /*
+        if ( af.GetPhysics()->GetLinearVelocity() < 0.0f ) {
+            //the car is moving backwards, even if the player is not using it
+        }    
+        */
 		// update the wheel motor force
 		for ( i = 0; i < 6; i++ ) {
 			wheels[i]->SetContactMotorVelocity( velocity );
@@ -2280,31 +2512,36 @@ void idAFEntity_VehicleSixWheels::Think( void ) {
 
 		// run the physics
 		RunPhysics();
-
+        
 		// rotate the wheels visually
 		for ( i = 0; i < 6; i++ ) {
-			if ( force == 0.0f ) {
-				velocity = wheels[i]->GetLinearVelocity() * wheels[i]->GetWorldAxis()[0];
+		    if ( force == 0.0f ) {
+		        velocity = wheels[i]->GetLinearVelocity() * wheels[i]->GetWorldAxis()[0];
 			}
-			wheelAngles[i] += velocity * MS2SEC( gameLocal.msec ) / wheelRadius;
+            if ( handbrake == false ) {  
+	            wheelAngles[i] += velocity * MS2SEC( gameLocal.msec ) / wheelRadius;
+            } 
+            //else {
+            //    wheelAngles[i] == wheelAngles[i];
+            //}
 			// give the wheel joint an additional rotation about the wheel axis
 			rotation.SetAngle( RAD2DEG( wheelAngles[i] ) );
-			axis = af.GetPhysics()->GetAxis( 0 );
-			rotation.SetVec( (wheels[i]->GetWorldAxis() * axis.Transpose())[2] );
-			animator.SetJointAxis( wheelJoints[i], JOINTMOD_WORLD, rotation.ToMat3() );
-		}
+		    axis = af.GetPhysics()->GetAxis( 0 );
+		    rotation.SetVec( (wheels[i]->GetWorldAxis() * axis.Transpose())[2] );
+		    animator.SetJointAxis( wheelJoints[i], JOINTMOD_WORLD, rotation.ToMat3() );
+        }
 
-		// spawn dust particle effects
-		if ( force != 0.0f && !( gameLocal.framenum & 7 ) ) {
-			int numContacts;
-			idAFConstraint_Contact *contacts[2];
-			for ( i = 0; i < 6; i++ ) {
-				numContacts = af.GetPhysics()->GetBodyContactConstraints( wheels[i]->GetClipModel()->GetId(), contacts, 2 );
-				for ( int j = 0; j < numContacts; j++ ) {
-					gameLocal.smokeParticles->EmitSmoke( dustSmoke, gameLocal.time, gameLocal.random.RandomFloat(), contacts[j]->GetContact().point, contacts[j]->GetContact().normal.ToMat3() );
-				}
-			}
-		}
+        // spawn dust particle effects
+        if ( force != 0.0f && !( gameLocal.framenum & 7 ) ) {
+            int numContacts;
+            idAFConstraint_Contact *contacts[2];
+            for ( i = 0; i < 6; i++ ) {
+                numContacts = af.GetPhysics()->GetBodyContactConstraints( wheels[i]->GetClipModel()->GetId(), contacts, 2 );
+                for ( int j = 0; j < numContacts; j++ ) {
+                    gameLocal.smokeParticles->EmitSmoke( dustSmoke, gameLocal.time, gameLocal.random.RandomFloat(), contacts[j]->GetContact().point, contacts[j]->GetContact().normal.ToMat3() );
+                }
+            }
+        }
 	}
 
 	UpdateAnimation();
@@ -2312,8 +2549,10 @@ void idAFEntity_VehicleSixWheels::Think( void ) {
 		Present();
 		LinkCombat();
 	}
+    // update light pos
+    //GetGlobalJointTransform( true, headlightsJoint, headlights_l.origin, headlights_l.axis );
 }
-
+// 7318 - vehicle - end
 
 /*
 ===============================================================================

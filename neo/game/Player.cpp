@@ -4541,11 +4541,11 @@ void idPlayer::UpdateFocus( void ) {
 				continue;
 			}
 
-			if ( ent->IsType( idAFEntity_Vehicle::Type ) ) {
+			if ( ent->IsType( idAFEntity_Wheeled_Vehicle::Type ) ) {
 				gameLocal.clip.TracePoint( trace, start, end, MASK_SHOT_RENDERMODEL, this );
 				if ( ( trace.fraction < 1.0f ) && ( trace.c.entityNum == ent->entityNumber ) ) {
 					ClearFocus();
-					focusVehicle = static_cast<idAFEntity_Vehicle *>( ent );
+					focusVehicle = static_cast<idAFEntity_Wheeled_Vehicle *>( ent );
 					focusTime = gameLocal.time + FOCUS_TIME;
 					break;
 				}
@@ -5619,9 +5619,10 @@ void idPlayer::UseVehicle( void ) {
 	idVec3 start, end;
 	idEntity *ent;
 
-	if ( GetBindMaster() && GetBindMaster()->IsType( idAFEntity_Vehicle::Type ) ) {
-		Show();
-		static_cast<idAFEntity_Vehicle*>(GetBindMaster())->Use( this );
+	if ( GetBindMaster() && GetBindMaster()->IsType( idAFEntity_Wheeled_Vehicle::Type ) ) {
+        //EXIT THE VEHICLE
+        Show();
+		static_cast<idAFEntity_Wheeled_Vehicle*>(GetBindMaster())->Use( this );
         /*if ( weapon.GetEntity()->IsReady() ) { // 7318 - FIXME
             weapon.GetEntity()->LowerWeapon();
         }  */      
@@ -5631,9 +5632,11 @@ void idPlayer::UseVehicle( void ) {
 		gameLocal.clip.TracePoint( trace, start, end, MASK_SHOT_RENDERMODEL, this );
 		if ( trace.fraction < 1.0f ) {
 			ent = gameLocal.entities[ trace.c.entityNum ];
-			if ( ent && ent->IsType( idAFEntity_Vehicle::Type ) ) {
+			if ( ent && ent->IsType( idAFEntity_Wheeled_Vehicle::Type ) ) {
+                //ENTER THE VEHICLE
+                SelectWeapon( IMPULSE_0, false ); //// 7318 - vehicle - select the fists(so no flashlight in car)
 				Hide();
-				static_cast<idAFEntity_Vehicle*>(ent)->Use( this );
+				static_cast<idAFEntity_Wheeled_Vehicle*>(ent)->Use( this );
                 /*if ( weapon.GetEntity()->IsHolstered() ) { // 7318 - FIXME
                     weapon.GetEntity()->RaiseWeapon();
                 }*/ 
@@ -5649,10 +5652,18 @@ idPlayer::VehicleHorn
 ==============
 */
 void idPlayer::VehicleHorn( void ) {
-	//gameLocal.Printf( "it works!\n" ); //debug
-	if ( GetBindMaster() && GetBindMaster()->IsType( idAFEntity_Vehicle::Type ) ) {
-        //gameLocal.Printf( "calling horn!\n" ); //debug
-		static_cast<idAFEntity_Vehicle*>(GetBindMaster())->SoundHorn();
+	if ( GetBindMaster() && GetBindMaster()->IsType( idAFEntity_Wheeled_Vehicle::Type ) ) {
+        static_cast<idAFEntity_Wheeled_Vehicle*>(GetBindMaster())->SoundHorn();
+	} 
+}
+/*
+==============
+idPlayer::VehicleToggleEngine
+==============
+*/
+void idPlayer::VehicleToggleEngine( void ) {
+	if ( GetBindMaster() && GetBindMaster()->IsType( idAFEntity_Wheeled_Vehicle::Type ) ) {
+        static_cast<idAFEntity_Wheeled_Vehicle*>(GetBindMaster())->ToggleEngine();
 	} 
 }
 // 7318 - vehicles - end
@@ -5675,12 +5686,22 @@ void idPlayer::PerformImpulse( int impulse ) {
 		ClientSendEvent( EVENT_IMPULSE, &msg );
 	}
 
-	if ( impulse >= IMPULSE_0 && impulse <= IMPULSE_12 ) {
+	if ( ( impulse >= IMPULSE_0 && impulse <= IMPULSE_12 ) && ( impulse != IMPULSE_11 ) ) { // 7318 - vehicle - moded
 		SelectWeapon( impulse, false );
 		return;
 	}
 
 	switch( impulse ) {
+        //7318 - vehicle - start
+        case IMPULSE_11 : {
+            if ( GetBindMaster() && GetBindMaster()->IsType( idAFEntity_Wheeled_Vehicle::Type ) ) {
+                // in car toggle the headlights
+		        static_cast<idAFEntity_Wheeled_Vehicle*>(GetBindMaster())->ToggleHeadlights();
+	        }else{
+                SelectWeapon( IMPULSE_11, false ); // select the flashlight as normal
+            }
+        }
+        //7318 - vehicle - end             
 		case IMPULSE_13: {
 			Reload();
 			break;
@@ -5748,6 +5769,10 @@ void idPlayer::PerformImpulse( int impulse ) {
 			VehicleHorn();
 			break;
 		}
+        case IMPULSE_42: {
+            VehicleToggleEngine();
+            break;
+        }
         // 7318 - vehicles - end
 	}
 }
@@ -6106,7 +6131,7 @@ void idPlayer::Move( void ) {
 		newEyeOffset = pm_deadviewheight.GetFloat();
 	} else if ( physicsObj.IsCrouching() ) {
 		newEyeOffset = pm_crouchviewheight.GetFloat();
-	} else if ( GetBindMaster() && GetBindMaster()->IsType( idAFEntity_Vehicle::Type ) ) {
+	} else if ( GetBindMaster() && GetBindMaster()->IsType( idAFEntity_Wheeled_Vehicle::Type ) ) {
 		newEyeOffset = 0.0f;
 	} else {
 		newEyeOffset = pm_normalviewheight.GetFloat();
@@ -7473,7 +7498,7 @@ void idPlayer::CalculateRenderView( void ) {
 			}
 		} else if ( pm_thirdPerson.GetBool() ) {
             // 7318 - vehicle - start
-            if ( GetBindMaster() && GetBindMaster()->IsType( idAFEntity_Vehicle::Type ) ) {
+            if ( GetBindMaster() && GetBindMaster()->IsType( idAFEntity_Wheeled_Vehicle::Type ) ) {
                 // the player IS in the car, so pm_thirdperson... vehicle values are used
                 OffsetThirdPersonView( pm_thirdPersonAngle.GetFloat(), pm_thirdPersonVehicleRange.GetFloat(), pm_thirdPersonVehicleHeight.GetFloat(), pm_thirdPersonClip.GetBool() );
             } else {

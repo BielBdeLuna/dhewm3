@@ -318,7 +318,6 @@ idAFEntity_Vehicle
 
 ===============================================================================
 */
-
 class idAFEntity_Vehicle : public idAFEntity_Base {
 public:
 	CLASS_PROTOTYPE( idAFEntity_Vehicle );
@@ -327,15 +326,38 @@ public:
 
 	void					Spawn( void );
 	void					Use( idPlayer *player );
-    // 7318 - vehicle - start
-    void                    SoundHorn( void );
-    void                    ToggleHeadlights( void );
-    // 7318 - vehicle - end
 
 protected:
 	idPlayer *				player;
 	jointHandle_t			eyesJoint;
+};
+
+/*
+===============================================================================
+
+idAFEntity_Wheeled_Vehicle
+
+===============================================================================
+*/
+
+class idAFEntity_Wheeled_Vehicle : public idAFEntity_Vehicle {
+public:
+	CLASS_PROTOTYPE( idAFEntity_Wheeled_Vehicle );
+
+							idAFEntity_Wheeled_Vehicle( void );
+
+	void					Spawn( void );
+	void					Use( idPlayer *player );
+
+    void                    SoundHorn( void );
+    void                    ToggleHeadlights( void );
+    void                    ToggleEngine( void );
+
+
+protected:
 	jointHandle_t			steeringWheelJoint;
+    jointHandle_t			headlightsJoint;
+
 	float					wheelRadius;
 	float					steerAngle;
 	float					steerSpeed;
@@ -344,7 +366,8 @@ protected:
 
 	float					GetSteerAngle( void );
 
-    // 7318 - vehicle - start
+
+    float					GetAcceleration( float vel );
 
     //instead of a cvar controlling all cars, let's not be interventionist here...
     float                   veh_velocity;           //"1000"
@@ -354,10 +377,29 @@ protected:
     float                   veh_suspensionKCompress;//"200"
     float                   veh_suspensionDamping;  //"400"
     float                   veh_tireFriction;       //"0.8"
+
+    float                   acceleration;
+    bool                    engine;
+    bool                    handbrake;
+    bool                    backwards;
+
+    //vehicle lights
+    bool                    headlights;
+    bool                    taillights;
+    bool                    blinklights;
+    int                     headlight_l;
+    int                     headlight_r;
+    int                     taillight_l;
+    int                     taillight_r;
+    int                     blinklight_l;
+    int                     blinklight_r;
     
-    bool                    engine;                 // is engine on or off?
-    // 7318 - vehicle - end
-    
+    renderLight_t			headlights_l;		// positioned on view weapon bone
+    idVec3					headlightsColor;
+	//int						muzzleFlashEnd;
+	int						headlightsTime;
+	//int						headlightsHandle;
+                     
 };
 
 
@@ -369,7 +411,7 @@ idAFEntity_VehicleSimple
 ===============================================================================
 */
 
-class idAFEntity_VehicleSimple : public idAFEntity_Vehicle {
+class idAFEntity_VehicleSimple : public idAFEntity_Wheeled_Vehicle {
 public:
 	CLASS_PROTOTYPE( idAFEntity_VehicleSimple );
 
@@ -395,7 +437,7 @@ idAFEntity_VehicleFourWheels
 ===============================================================================
 */
 
-class idAFEntity_VehicleFourWheels : public idAFEntity_Vehicle {
+class idAFEntity_VehicleFourWheels : public idAFEntity_Wheeled_Vehicle {
 public:
 	CLASS_PROTOTYPE( idAFEntity_VehicleFourWheels );
 
@@ -420,7 +462,7 @@ idAFEntity_VehicleSixWheels
 ===============================================================================
 */
 
-class idAFEntity_VehicleSixWheels : public idAFEntity_Vehicle {
+class idAFEntity_VehicleSixWheels : public idAFEntity_Wheeled_Vehicle {
 public:
 	CLASS_PROTOTYPE( idAFEntity_VehicleSixWheels );
 

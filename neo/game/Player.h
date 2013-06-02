@@ -686,6 +686,7 @@ private:
 
 	void					UseVehicle( void );
     void                    VehicleHorn( void ); // 7318 - vehicles
+    void                    VehicleToggleEngine( void ); // 7318 - vehicles
 
 	void					Event_GetButtons( void );
 	void					Event_GetMove( void );
