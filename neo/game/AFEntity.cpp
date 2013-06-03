@@ -1704,11 +1704,15 @@ idAFEntity_Wheeled_Vehicle::idAFEntity_Wheeled_Vehicle( void ) {
 	steerAngle			= 0.0f;
 	steerSpeed			= 0.0f;
 	dustSmoke			= NULL;
-
-    acceleration        = 0.0f;    
-    engine              = false;
-    handbrake           = false;
+  
+    handbrake           = 1.0f; // 1.0f pushed (off), 0.0f pulled (on)
     backwards           = false;
+    skid                = false;
+    engine              = -1;
+    torque              = 0.0f;
+    forwardTorque       = 0.0f;
+    backwardTorque      = 0.0f;
+    maxTorque           = 1.0f;
 
     headlights          = false;
     taillights          = false;
@@ -1724,7 +1728,7 @@ idAFEntity_Wheeled_Vehicle::idAFEntity_Wheeled_Vehicle( void ) {
     
     //vehicle physical capabilities
     veh_velocity            = 1000;
-    veh_force               = 50000;
+    veh_force               = 400; //50000
     veh_suspensionUp        = 32;
     veh_suspensionDown      = 20;
     veh_suspensionKCompress = 200;
@@ -1772,13 +1776,19 @@ void idAFEntity_Wheeled_Vehicle::Spawn( void ) {
     spawnArgs.GetFloat( "suspensionDamping", "400", veh_suspensionDamping );
     spawnArgs.GetFloat( "tireFriction", "0.8", veh_tireFriction );
 
-    spawnArgs.GetBool( "engine", "0", engine);
+    spawnArgs.GetInt( "engine", "-1", engine);
+    spawnArgs.GetFloat( "handbrake", "0.0", handbrake );
+    spawnArgs.GetFloat( "maxTorque", "1.0", maxTorque );
     spawnArgs.GetBool( "headlights", "0", headlights);
 
     taillights = false;
     blinklights = false;
-    handbrake = false;
-    backwards = false;  
+    backwards = false;
+    skid = false;
+
+    torque              = 0.0f;
+    forwardTorque       = 0.0f;
+    backwardTorque      = 0.0f;
 
 	player = NULL;
 	steerAngle = 0.0f;
@@ -1824,7 +1834,7 @@ void idAFEntity_Wheeled_Vehicle::Spawn( void ) {
 		headlights_l.end								= headlightsTarget;
 	}
 
-    if ( engine == true ) {
+    if ( engine == 0 ) {
         StartSound( "snd_engine_idle", SND_CHANNEL_BODY, 0, false, NULL );
     }
 
@@ -1845,7 +1855,13 @@ void idAFEntity_Wheeled_Vehicle::Use( idPlayer *other ) {
 
 	if ( player ) {
 		if ( player == other ) {
-            handbrake = false;
+            //handbrake = 1.0f; // in case we wrere pulling it, let go the handbrake when we leave the car
+            //if ( engine == 1 ) {
+                //StopSound(SND_CHANNEL_BODY, NULL); // stop the gas sound
+                //since this sound loops I use this in order to start it only once
+                //StartSound( "snd_engine_idle", SND_CHANNEL_BODY, 0, false, NULL );
+                //engine = 0; // in case we leave while driving at full throttle, set the car to idle
+            //}
             other->Unbind();
 			player = NULL;
 
@@ -1884,19 +1900,6 @@ float idAFEntity_Wheeled_Vehicle::GetSteerAngle( void ) {
 	}
 
 	return steerAngle;
-}
-
-/*
-================
-idAFEntity_Wheeled_Vehicle::GetAcceleration
-
-this should be useful for the sound of the motor
-================
-*/
-float idAFEntity_Wheeled_Vehicle::GetAcceleration( float vel ) {
-	//TODO in order to get the acceleration what do I have to do?
-    
-	return acceleration;
 }
 
 /*
@@ -1946,18 +1949,17 @@ idAFEntity_Wheeled_Vehicle::ToggleEngine
 */
 void idAFEntity_Wheeled_Vehicle::ToggleEngine( void ) {
 
-    if ( engine == true ) {
+    if ( engine >= 0 ) {
         gameLocal.Printf( "engine OFF\n" ); //debug
         StopSound(SND_CHANNEL_BODY, NULL);
-        //FadeSound(SND_CHANNEL_ANY, -96, 1);
         StartSound( "snd_stop_engine", SND_CHANNEL_VOICE, 0, false, NULL );
-        engine = false;
+        engine = -1;
         
     }else{
-        gameLocal.Printf( "lights ON\n" ); //debug
+        gameLocal.Printf( "engine ON\n" ); //debug
         StartSound( "snd_start_engine", SND_CHANNEL_VOICE, 0, false, NULL );
         StartSound( "snd_engine_idle", SND_CHANNEL_BODY, 0, false, NULL );
-        engine = true;
+        engine = 0;
     }
         
 }
@@ -2435,48 +2437,147 @@ idAFEntity_VehicleSixWheels::Think
 */
 void idAFEntity_VehicleSixWheels::Think( void ) {
 	int i;
-	float force = 0.0f, velocity = 0.0f, steerAngle = 0.0f;
-	idVec3 origin;
+	float force = 0.0f, velocity = 0.0f, steerAngle = 0.0f, directionalForce = 0.0f, torqueEXP = 256.0f;
+    idVec3 origin;
 	idMat3 axis;
 	idRotation rotation;
 
 	if ( thinkFlags & TH_THINK ) {
+
 		if ( player ) {
-			// capture the input from a player
-			velocity = veh_velocity; // 7318 - moded
-			if ( player->usercmd.forwardmove < 0 ) {
-                // backwards
-				velocity = -velocity;
-                //if ( ( backwards == false ) && ( engine == true ) && ( handbrake == false ) ) {
-                if ( ( backwards == false ) && ( engine == true ) ) {
-                    StartSound( "snd_alarm", SND_CHANNEL_DEMONIC, 0, false, NULL );
-                }
+			velocity = veh_velocity;
+            steerAngle = GetSteerAngle();
+        }
+
+	    if ( ( player ) && ( engine >= 0 ) && ( player->usercmd.forwardmove < 0 ) ) {
+            // backwards
+		    velocity = -velocity;
+            if ( backwards == false ) {
+                //since this sound loops I use this in order to start it only once
+                StartSound( "snd_alarm", SND_CHANNEL_DEMONIC, 0, false, NULL );
                 backwards = true;
-			} else {
-                StopSound(SND_CHANNEL_DEMONIC, NULL);
-                backwards = false;
-            }       
-            
-            if ( player->usercmd.upmove > 0 ) {
-                //stop the car because we're handbreaking
-                if ( handbrake == false ) {
-                    StartSound( "snd_handbrake", SND_CHANNEL_VOICE, 0, false, NULL );
+            }            
+		} else {
+            StopSound(SND_CHANNEL_DEMONIC, NULL); // stop bacwards sound
+            backwards = false;
+        }
+
+        if ( ( player ) && ( player->usercmd.upmove > 0 ) ) {
+            //stop the car because we're handbreaking, even if the engine is turned off
+            if ( handbrake == 1.0f ) {
+                StartSound( "snd_handbrake", SND_CHANNEL_VOICE, 0, false, NULL );
+                if ( ( engine == 1 ) && ( skid == false ) ) { 
+                //FIXME insted of checking for the engine, check for the actualk speed of the car
+                    //since this sound loops I use this in order to start it only once
+                    StartSound( "snd_skid", SND_CHANNEL_BODY2, 0, false, NULL );
+                    skid = true;
                 }
-                handbrake = true;
-                force = 0.0f;
-            }else{
-                handbrake = false;
-                if (engine == true ) {
-                    force = idMath::Fabs( player->usercmd.forwardmove * veh_force ) * (1.0f / 128.0f); // 7318 - moded
+                handbrake = 0.0f; // handbrake overrides the force of the car dividing it by zero
+            }            
+        } else {
+            handbrake = 1.0f;
+            StopSound(SND_CHANNEL_BODY2, NULL); //stop the skid sound
+            skid = false;
+        }
+
+        if ( !player ) {
+            if ( engine == 1 ) {
+                StopSound(SND_CHANNEL_BODY, NULL); // stop the gas sound
+                //since this sound loops I use this in order to start it only once
+                StartSound( "snd_engine_idle", SND_CHANNEL_BODY, 0, false, NULL );
+                engine = 0;
+            }
+        } else {
+            if ( ( player->usercmd.forwardmove != 0 ) && ( engine == 0 ) ) {
+                //since this sound loops I use this in order to start it only once
+                StopSound(SND_CHANNEL_BODY, NULL); // stop the idle sound
+                StartSound( "snd_engine_gas", SND_CHANNEL_BODY, 0, false, NULL );
+                engine = 1;
+            }
+            if ( player->usercmd.forwardmove > 0 ) {
+                if ( engine == 1 ) {
+                    if ( forwardTorque < maxTorque ) {
+                        //keep rising the torque gradually
+                        forwardTorque = forwardTorque + ( 1.0f / ( torqueEXP * 0.6f ) ); 
+                                
+                        if ( forwardTorque > maxTorque ) {
+                            forwardTorque = maxTorque; // keep it clean
+                        }
+                    }
+                } 
+            } else if ( player->usercmd.forwardmove < 0 ) {
+                if ( engine == 1 ) {
+                    if ( backwardTorque > -maxTorque ) {
+                        //keep lowering the torque gradually
+                        backwardTorque = backwardTorque - ( 1.0f / ( torqueEXP * 0.6f ) ); 
+                                
+                        if ( backwardTorque < -maxTorque ) {
+                            backwardTorque = -maxTorque; // keep it clean
+                        }
+                    }
+                }
+             } else if ( player->usercmd.forwardmove == 0 ) {                    
+                StopSound(SND_CHANNEL_BODY2, NULL); //stop the skid sound
+                if ( engine == 1 ) {
+                    StopSound(SND_CHANNEL_BODY, NULL); // stop the gas sound
+                    //since this sound loops I use this in order to start it only once
+                    StartSound( "snd_engine_idle", SND_CHANNEL_BODY, 0, false, NULL );
+                    engine = 0;
+                }      
+            }
+        }
+
+
+        if ( ( !player ) || ( engine == -1 ) || ( ( player ) && ( player->usercmd.forwardmove == 0 ) ) ) {
+            //TODO add torque reduction due steering
+            // if we leave the car or stop the engine keep lowering the torque
+            if ( forwardTorque > 0.0f ) {
+                forwardTorque = forwardTorque - ( 1.0f / ( torqueEXP * 0.9f ) ); 
+                // keep lowering the torque if we don't press the gas
+                if ( forwardTorque < 0.0f ) {
+                    forwardTorque = 0.0f; //so we don't make some strage inverse torque                    
                 }
             }
-			steerAngle = GetSteerAngle();
+            if ( backwardTorque < 0.0f ) {
+                backwardTorque = backwardTorque + ( 1.0f / ( torqueEXP * 0.9f ) ); 
+                // keep lowering the torque if we don't press the gas
+                if ( backwardTorque > 0.0f ) {
+                    backwardTorque = 0.0f; //so we don't make some strage inverse torque                    
+                }
+            }
         }
+        // torque then is an amalgamation of both torques, 
+        // each other canceling out in some circumstances, and making the car far more difficult to use
+        torque = forwardTorque - backwardTorque;
+
+        //add the direction the player is facing to the "force" of the car
+        if ( ( player ) && ( engine >= 0 ) ) {            
+            directionalForce = idMath::Fabs( player->usercmd.forwardmove * veh_force );
+        }
+
+        // if we exit the car we no longer keep pressing the acelerator, 
+        // the car might still move due the action exercised by torque though.
+        // Handbrake is there for the case where the player is still in the car.
+        force = directionalForce * torque * handbrake;
+
         /*
         if ( af.GetPhysics()->GetLinearVelocity() < 0.0f ) {
             //the car is moving backwards, even if the player is not using it
         }    
         */
+
+/*
+        if ( player ) {
+			// capture the input from a player
+			velocity = veh_velocity;  // 7318 - moded
+			if ( player->usercmd.forwardmove < 0 ) {
+				velocity = -velocity;
+			}
+			force = idMath::Fabs( player->usercmd.forwardmove * veh_force ) * (1.0f / 128.0f); // 7318 - moded
+			steerAngle = GetSteerAngle();
+		}
+*/
+
 		// update the wheel motor force
 		for ( i = 0; i < 6; i++ ) {
 			wheels[i]->SetContactMotorVelocity( velocity );
@@ -2518,12 +2619,14 @@ void idAFEntity_VehicleSixWheels::Think( void ) {
 		    if ( force == 0.0f ) {
 		        velocity = wheels[i]->GetLinearVelocity() * wheels[i]->GetWorldAxis()[0];
 			}
-            if ( handbrake == false ) {  
+            if ( handbrake == 1.0f ) {  
 	            wheelAngles[i] += velocity * MS2SEC( gameLocal.msec ) / wheelRadius;
-            } 
-            //else {
-            //    wheelAngles[i] == wheelAngles[i];
-            //}
+            }
+            /*
+            else {
+                wheelAngles[i] == wheelAngles[i];
+            }
+            */
 			// give the wheel joint an additional rotation about the wheel axis
 			rotation.SetAngle( RAD2DEG( wheelAngles[i] ) );
 		    axis = af.GetPhysics()->GetAxis( 0 );

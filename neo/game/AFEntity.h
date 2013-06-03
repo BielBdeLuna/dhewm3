@@ -378,10 +378,16 @@ protected:
     float                   veh_suspensionDamping;  //"400"
     float                   veh_tireFriction;       //"0.8"
 
-    float                   acceleration;
-    bool                    engine;
-    bool                    handbrake;
+    float                   handbrake;
+    float                   torque;
+    float                   forwardTorque;
+    float                   backwardTorque;
+    float                   maxTorque;
     bool                    backwards;
+    bool                    gas;
+    bool                    skid;
+    bool                    idle;
+    int                     engine;     //-1 off, 0 idle, 1 gas
 
     //vehicle lights
     bool                    headlights;
