@@ -326,6 +326,7 @@ public:
 
 	void					Spawn( void );
 	void					Use( idPlayer *player );
+    bool                    GetGlobalJointTransform(jointHandle_t, idVec3&, idMat3&);
 
 protected:
 	idPlayer *				player;
@@ -352,6 +353,10 @@ public:
     void                    SoundHorn( void );
     void                    ToggleHeadlights( void );
     void                    ToggleEngine( void );
+
+//private:
+    void                    UpdateHeadlightsPosition();
+    idAFEntity_Wheeled_Vehicle *    car;
 
 
 protected:
@@ -400,14 +405,39 @@ protected:
     int                     blinklight_l;
     int                     blinklight_r;
     
-    renderLight_t			headlights_l;		// positioned on view weapon bone
+    renderLight_t			r_headlights;
     idVec3					headlightsColor;
-	//int						muzzleFlashEnd;
+	int						headlightsEnd;
 	int						headlightsTime;
-	//int						headlightsHandle;
+	int						headlightsHandle;
+    idVec3					headlightsOrigin;
+	idMat3					headlightsAxis;
                      
 };
 
+/*
+===============================================================================
+
+idAFEntity_VehicleSixWheels
+
+===============================================================================
+*/
+
+class idAFEntity_VehicleSixWheels : public idAFEntity_Wheeled_Vehicle {
+public:
+	CLASS_PROTOTYPE( idAFEntity_VehicleSixWheels );
+
+							idAFEntity_VehicleSixWheels( void );
+
+	void					Spawn( void );
+	virtual void			Think( void );
+
+private:
+	idAFBody *				wheels[6];
+	idAFConstraint_Hinge *	steering[4];
+	jointHandle_t			wheelJoints[6];
+	float					wheelAngles[6];
+};
 
 /*
 ===============================================================================
@@ -434,7 +464,6 @@ protected:
 	float					wheelAngles[4];
 };
 
-
 /*
 ===============================================================================
 
@@ -458,32 +487,6 @@ protected:
 	jointHandle_t			wheelJoints[4];
 	float					wheelAngles[4];
 };
-
-
-/*
-===============================================================================
-
-idAFEntity_VehicleSixWheels
-
-===============================================================================
-*/
-
-class idAFEntity_VehicleSixWheels : public idAFEntity_Wheeled_Vehicle {
-public:
-	CLASS_PROTOTYPE( idAFEntity_VehicleSixWheels );
-
-							idAFEntity_VehicleSixWheels( void );
-
-	void					Spawn( void );
-	virtual void			Think( void );
-
-private:
-	idAFBody *				wheels[6];
-	idAFConstraint_Hinge *	steering[4];
-	jointHandle_t			wheelJoints[6];
-	float					wheelAngles[6];
-};
-
 
 /*
 ===============================================================================

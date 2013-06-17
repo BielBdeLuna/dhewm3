@@ -1618,7 +1618,6 @@ void idAFEntity_Vehicle::Spawn( void ) {
 		gameLocal.Error( "idAFEntity_Vehicle '%s' no eyes joint specified", name.c_str() );
 	}
 	eyesJoint = animator.GetJointHandle( eyesJointName );
-    
 
 	player = NULL;
 }
@@ -1658,26 +1657,18 @@ idAFEntity_Vehicle::GetGlobalJointTransform
 This returns the offset and axis of a weapon bone in world space, suitable for attaching models or lights
 ================
 */
-/*
-bool idAFEntity_Vehicle::GetGlobalJointTransform( const jointHandle_t jointHandle, idVec3 &offset, idMat3 &axis ) {*/
-    /*
-    if ( worldModel.GetEntity() && worldModel.GetEntity()->GetAnimator()->GetJointTransform( jointHandle, gameLocal.time, offset, axis ) ) {
-			offset = worldModel.GetEntity()->GetPhysics()->GetOrigin() + offset * worldModel.GetEntity()->GetPhysics()->GetAxis();
-			axis = axis * worldModel.GetEntity()->GetPhysics()->GetAxis();
+
+bool idAFEntity_Vehicle::GetGlobalJointTransform( const jointHandle_t jointHandle, idVec3 &offset, idMat3 &axis ) {
+    if ( animator.GetJointTransform( jointHandle, gameLocal.time, offset, axis ) ) {
+			offset = offset * af.GetPhysics()->GetAxis() + af.GetPhysics()->GetOrigin();
+			axis = axis * af.GetPhysics()->GetAxis();
 			return true;
 	}
-    */
-/*
-    if ( this.GetEntity() && worldModel.GetEntity()->GetAnimator()->GetJointTransform( jointHandle, gameLocal.time, offset, axis ) ) {
-			offset = this.GetEntity()->GetPhysics()->GetOrigin() + offset * this.GetEntity()->GetPhysics()->GetAxis();
-			axis = axis * this.GetEntity()->GetPhysics()->GetAxis();
-			return true;
-	}
-	offset = viewWeaponOrigin;  //?
-	axis = viewWeaponAxis;      //?
+	offset = af.GetPhysics()->GetOrigin();
+	axis = af.GetPhysics()->GetAxis();
 	return false;
 }
-*/
+
 
 /*
 ===============================================================================
@@ -1717,6 +1708,12 @@ idAFEntity_Wheeled_Vehicle::idAFEntity_Wheeled_Vehicle( void ) {
     headlights          = false;
     taillights          = false;
     blinklights         = false;
+
+    headlightsEnd       = 0;   
+    headlightsHandle    = -1;
+    //headlightsAxis.Identity();
+    //headlightsOrigin.Zero();
+
 
     //vehicle individual lights status
     headlight_l         = 0;
@@ -1807,31 +1804,31 @@ void idAFEntity_Wheeled_Vehicle::Spawn( void ) {
 	spawnArgs.GetString( "mtr_flashShader", "", &shader );
 	headlightsShader = declManager->FindMaterial( shader, false );
 	headlightsPointLight = spawnArgs.GetBool( "flashPointLight", "1" );
-	spawnArgs.GetVector( "flashColor", "0 0 0", headlightsColor );
+	spawnArgs.GetVector( "flashColor", "1 1 1", headlightsColor );
 	headlightsRadius		= (float)spawnArgs.GetInt( "flashRadius" );	// if 0, no light will spawn
 	headlightsTime          = SEC2MS( spawnArgs.GetFloat( "flashTime", "0.25" ) );
 	headlightsTarget		= spawnArgs.GetVector( "flashTarget" );
 	headlightsUp			= spawnArgs.GetVector( "flashUp" );
 	headlightsRight         = spawnArgs.GetVector( "flashRight" );
 
-    memset( &headlights_l, 0, sizeof( headlights_l ) );
+    memset( &r_headlights, 0, sizeof( r_headlights ) );
 
-    headlights_l.pointLight								= headlightsPointLight;
-	headlights_l.shader									= headlightsShader;
-	headlights_l.shaderParms[ SHADERPARM_RED ]			= headlightsColor[0];
-	headlights_l.shaderParms[ SHADERPARM_GREEN ]		= headlightsColor[1];
-	headlights_l.shaderParms[ SHADERPARM_BLUE ]			= headlightsColor[2];
-	headlights_l.shaderParms[ SHADERPARM_TIMESCALE ]	= 1.0f;
+    r_headlights.pointLight								= headlightsPointLight;
+	r_headlights.shader									= headlightsShader;
+	r_headlights.shaderParms[ SHADERPARM_RED ]			= headlightsColor[0];
+	r_headlights.shaderParms[ SHADERPARM_GREEN ]		    = headlightsColor[1];
+	r_headlights.shaderParms[ SHADERPARM_BLUE ]			= headlightsColor[2];
+	r_headlights.shaderParms[ SHADERPARM_TIMESCALE ]	    = 1.0f;
 
-	headlights_l.lightRadius[0]							= headlightsRadius;
-	headlights_l.lightRadius[1]							= headlightsRadius;
-	headlights_l.lightRadius[2]							= headlightsRadius;
+	r_headlights.lightRadius[0]							= headlightsRadius;
+	r_headlights.lightRadius[1]							= headlightsRadius;
+	r_headlights.lightRadius[2]							= headlightsRadius;
 
 	if ( !headlightsPointLight ) {
-		headlights_l.target								= headlightsTarget;
-		headlights_l.up									= headlightsUp;
-		headlights_l.right								= headlightsRight;
-		headlights_l.end								= headlightsTarget;
+		r_headlights.target								= headlightsTarget;
+		r_headlights.up									= headlightsUp;
+		r_headlights.right								= headlightsRight;
+		r_headlights.end								    = headlightsTarget;
 	}
 
     if ( engine == 0 ) {
@@ -1855,13 +1852,6 @@ void idAFEntity_Wheeled_Vehicle::Use( idPlayer *other ) {
 
 	if ( player ) {
 		if ( player == other ) {
-            //handbrake = 1.0f; // in case we wrere pulling it, let go the handbrake when we leave the car
-            //if ( engine == 1 ) {
-                //StopSound(SND_CHANNEL_BODY, NULL); // stop the gas sound
-                //since this sound loops I use this in order to start it only once
-                //StartSound( "snd_engine_idle", SND_CHANNEL_BODY, 0, false, NULL );
-                //engine = 0; // in case we leave while driving at full throttle, set the car to idle
-            //}
             other->Unbind();
 			player = NULL;
 
@@ -1904,6 +1894,29 @@ float idAFEntity_Wheeled_Vehicle::GetSteerAngle( void ) {
 
 /*
 ================
+idAFEntity_Wheeled_Vehicle::UpdateHeadlightsPosition
+================
+*/
+void idAFEntity_Wheeled_Vehicle::UpdateHeadlightsPosition( void ) {
+	// the flash has an explicit joint for locating it
+	GetGlobalJointTransform( headlightsJoint, r_headlights.origin, r_headlights.axis );
+
+//    r_headlights.origin = af.GetPhysics()->GetOrigin();
+//    r_headlights.axis = af.GetPhysics()->GetAxis();
+
+    /*
+	// if the desired point is inside or very close to a wall, back it up until it is clear
+	idVec3	start = r_headlights.origin - vehicleOrigin[0] * 16;
+	idVec3	end = r_headlights.origin + vehicleAxis[0] * 8;
+	trace_t	tr;
+	gameLocal.clip.TracePoint( tr, start, end, MASK_SHOT_RENDERMODEL, car );
+	// be at least 8 units away from a solid
+	r_headlights.origin = tr.endpos - vehicleAxis[0] * 8;
+    */
+}
+
+/*
+================
 idAFEntity_Wheeled_Vehicle::SoundHorn
 ================
 */
@@ -1920,7 +1933,33 @@ void idAFEntity_Wheeled_Vehicle::ToggleHeadlights( void ) {
     //StartSound( "snd_alarm", SND_CHANNEL_ANY, 0, false, NULL ); //FIXME very much
 
     if ( headlights == false ) {
+
+        if ( headlightsJoint == INVALID_JOINT ) {
+		    return;
+	    }
+        
+        if ( !r_headlights.lightRadius[0] ) {
+		    return;
+	    }
+        // LIGHTS ON
+        StartSound( "snd_switch_on", SND_CHANNEL_ANY, 0, false, NULL );
+
+        UpdateHeadlightsPosition();
+
+        r_headlights.shaderParms[ SHADERPARM_TIMEOFFSET ] = -MS2SEC( gameLocal.time );
+        r_headlights.shaderParms[ SHADERPARM_DIVERSITY ] = renderEntity.shaderParms[ SHADERPARM_DIVERSITY ];
+
+
+        headlightsEnd = gameLocal.time + headlightsTime;
+
+        if ( headlightsHandle != -1 ) {
+		    gameRenderWorld->UpdateLightDef( headlightsHandle, &r_headlights );
+        } else {
+		    headlightsHandle = gameRenderWorld->AddLightDef( &r_headlights );
+        }       
+
         gameLocal.Printf( "lights ON\n" ); //debug
+        /*
         if ( headlight_l == -1 ) { //7318 the light is broken
             headlight_l = 0;
         }else{
@@ -1932,11 +1971,19 @@ void idAFEntity_Wheeled_Vehicle::ToggleHeadlights( void ) {
         }else{
             headlight_r = 1;
         }
+    */
         headlights = true;
     }else{
+        if ( headlightsHandle != -1 ) {
+            // LIGHTS OFF
+            StartSound( "snd_switch_off", SND_CHANNEL_ANY, 0, false, NULL );
+		    gameRenderWorld->FreeLightDef( headlightsHandle );
+            headlightsHandle = -1;
+            headlightsEnd = 0;
+        }
         gameLocal.Printf( "lights OFF\n" ); //debug
-        headlight_l = 0;
-        headlight_r = 0;
+        //headlight_l = 0;
+        //headlight_r = 0; 
         headlights = false;
     }
         
@@ -1962,6 +2009,359 @@ void idAFEntity_Wheeled_Vehicle::ToggleEngine( void ) {
         engine = 0;
     }
         
+}
+
+/*
+===============================================================================
+
+  idAFEntity_VehicleSixWheels
+
+===============================================================================
+*/
+
+CLASS_DECLARATION( idAFEntity_Wheeled_Vehicle, idAFEntity_VehicleSixWheels )
+END_CLASS
+
+	/*
+================
+idAFEntity_VehicleSixWheels::idAFEntity_VehicleSixWheels
+================
+*/
+idAFEntity_VehicleSixWheels::idAFEntity_VehicleSixWheels( void ) {
+	int i;
+
+	for ( i = 0; i < 6; i++ ) {
+		wheels[i]		= NULL;
+		wheelJoints[i]	= INVALID_JOINT;
+		wheelAngles[i]	= 0.0f;
+	}
+	steering[0]			= NULL;
+	steering[1]			= NULL;
+	steering[2]			= NULL;
+	steering[3]			= NULL;
+}
+
+/*
+================
+idAFEntity_VehicleSixWheels::Spawn
+================
+*/
+void idAFEntity_VehicleSixWheels::Spawn( void ) {
+	int i;
+	static const char *wheelBodyKeys[] = {
+		"wheelBodyFrontLeft",
+		"wheelBodyFrontRight",
+		"wheelBodyMiddleLeft",
+		"wheelBodyMiddleRight",
+		"wheelBodyRearLeft",
+		"wheelBodyRearRight"
+	};
+	static const char *wheelJointKeys[] = {
+		"wheelJointFrontLeft",
+		"wheelJointFrontRight",
+		"wheelJointMiddleLeft",
+		"wheelJointMiddleRight",
+		"wheelJointRearLeft",
+		"wheelJointRearRight"
+	};
+	static const char *steeringHingeKeys[] = {
+		"steeringHingeFrontLeft",
+		"steeringHingeFrontRight",
+		"steeringHingeRearLeft",
+		"steeringHingeRearRight"
+	};
+
+	const char *wheelBodyName, *wheelJointName, *steeringHingeName;
+
+	for ( i = 0; i < 6; i++ ) {
+		wheelBodyName = spawnArgs.GetString( wheelBodyKeys[i], "" );
+		if ( !wheelBodyName[0] ) {
+			gameLocal.Error( "idAFEntity_VehicleSixWheels '%s' no '%s' specified", name.c_str(), wheelBodyKeys[i] );
+		}
+		wheels[i] = af.GetPhysics()->GetBody( wheelBodyName );
+		if ( !wheels[i] ) {
+			gameLocal.Error( "idAFEntity_VehicleSixWheels '%s' can't find wheel body '%s'", name.c_str(), wheelBodyName );
+		}
+		wheelJointName = spawnArgs.GetString( wheelJointKeys[i], "" );
+		if ( !wheelJointName[0] ) {
+			gameLocal.Error( "idAFEntity_VehicleSixWheels '%s' no '%s' specified", name.c_str(), wheelJointKeys[i] );
+		}
+		wheelJoints[i] = animator.GetJointHandle( wheelJointName );
+		if ( wheelJoints[i] == INVALID_JOINT ) {
+			gameLocal.Error( "idAFEntity_VehicleSixWheels '%s' can't find wheel joint '%s'", name.c_str(), wheelJointName );
+		}
+	}
+
+	for ( i = 0; i < 4; i++ ) {
+		steeringHingeName = spawnArgs.GetString( steeringHingeKeys[i], "" );
+		if ( !steeringHingeName[0] ) {
+			gameLocal.Error( "idAFEntity_VehicleSixWheels '%s' no '%s' specified", name.c_str(), steeringHingeKeys[i] );
+		}
+		steering[i] = static_cast<idAFConstraint_Hinge *>(af.GetPhysics()->GetConstraint( steeringHingeName ));
+		if ( !steering[i] ) {
+			gameLocal.Error( "idAFEntity_VehicleSixWheels '%s': can't find steering hinge '%s'", name.c_str(), steeringHingeName );
+		}
+	}
+
+	memset( wheelAngles, 0, sizeof( wheelAngles ) );
+	BecomeActive( TH_THINK );
+}
+
+/*
+================
+idAFEntity_VehicleSixWheels::Think
+================
+*/
+void idAFEntity_VehicleSixWheels::Think( void ) {
+	int i;
+	float force = 0.0f, velocity = 0.0f, steerAngle = 0.0f, directionalForce = 0.0f, torqueEXP = 256.0f;
+    idVec3 origin;
+	idMat3 axis;
+	idRotation rotation;
+
+	if ( thinkFlags & TH_THINK ) {
+
+		if ( player ) {
+			velocity = veh_velocity;
+            steerAngle = GetSteerAngle();
+        }
+
+	    if ( ( player ) && ( engine >= 0 ) && ( player->usercmd.forwardmove < 0 ) ) {
+            // backwards
+		    velocity = -velocity;
+            if ( backwards == false ) {
+                //since this sound loops I use this in order to start it only once
+                StartSound( "snd_alarm", SND_CHANNEL_DEMONIC, 0, false, NULL );
+                backwards = true;
+            }            
+		} else {
+            StopSound(SND_CHANNEL_DEMONIC, NULL); // stop bacwards sound
+            backwards = false;
+        }
+
+        if ( ( player ) && ( player->usercmd.upmove > 0 ) ) {
+            //stop the car because we're handbreaking, even if the engine is turned off
+            if ( handbrake == 1.0f ) {
+                StartSound( "snd_handbrake", SND_CHANNEL_VOICE, 0, false, NULL );
+                if ( ( engine == 1 ) && ( skid == false ) ) {
+                //FIXME replace the "engine == 1" with some checks on the direction of the car and the torque
+                    //since this sound loops I use this in order to start it only once
+                    StartSound( "snd_skid", SND_CHANNEL_BODY2, 0, false, NULL );
+                    skid = true;
+                }
+                handbrake = 0.0f; // handbrake overrides the force of the car dividing it by zero
+            }            
+        } else {
+            handbrake = 1.0f;
+            StopSound(SND_CHANNEL_BODY2, NULL); //stop the skid sound
+            skid = false;
+        }
+
+        if ( !player ) {
+            if ( engine == 1 ) {
+                StopSound(SND_CHANNEL_BODY, NULL); // stop the gas sound
+                //since this sound loops I use this in order to start it only once
+                StartSound( "snd_engine_idle", SND_CHANNEL_BODY, 0, false, NULL );
+                engine = 0;
+            }
+        } else {
+            if ( ( player->usercmd.forwardmove != 0 ) && ( engine == 0 ) ) {
+                //since this sound loops I use this in order to start it only once
+                StopSound(SND_CHANNEL_BODY, NULL); // stop the idle sound
+                StartSound( "snd_engine_gas", SND_CHANNEL_BODY, 0, false, NULL );
+                engine = 1;
+            }
+            if ( player->usercmd.forwardmove > 0 ) {
+                if ( engine == 1 ) {
+                    if ( forwardTorque < maxTorque ) {
+                        //keep rising the torque gradually
+                        forwardTorque = forwardTorque + ( 1.0f / ( torqueEXP * 0.6f ) ); 
+                                
+                        if ( forwardTorque > maxTorque ) {
+                            forwardTorque = maxTorque; // keep it clean
+                        }
+                    }
+                } 
+            } else if ( player->usercmd.forwardmove < 0 ) {
+                if ( engine == 1 ) {
+                    if ( backwardTorque > -maxTorque ) {
+                        //keep lowering the torque gradually
+                        backwardTorque = backwardTorque - ( 1.0f / ( torqueEXP * 0.6f ) ); 
+                                
+                        if ( backwardTorque < -maxTorque ) {
+                            backwardTorque = -maxTorque; // keep it clean
+                        }
+                    }
+                }
+             } else if ( player->usercmd.forwardmove == 0 ) {                    
+                StopSound(SND_CHANNEL_BODY2, NULL); //stop the skid sound
+                if ( ( engine == 1 ) && ( torque == 0.0f ) ) { 
+                    // unless we stop giving in more torque, don't play the idle sound
+                    StopSound(SND_CHANNEL_BODY, NULL); // stop the gas sound
+                    //since this sound loops I use this in order to start it only once
+                    StartSound( "snd_engine_idle", SND_CHANNEL_BODY, 0, false, NULL );
+                    engine = 0;
+                }      
+            }
+        }
+
+
+        if ( ( !player ) || ( engine == -1 ) || ( ( player ) && ( player->usercmd.forwardmove == 0 ) ) ) {
+            //TODO add torque reduction due steering
+
+            // if we leave the car or stop the engine keep lowering the torque
+            if ( forwardTorque > 0.0f ) {
+                // keep lowering the torque if we don't press the gas                 
+                if ( handbrake == 0.0f ) {
+                    forwardTorque = forwardTorque - ( 1.0f / ( torqueEXP * 0.4f ) );
+                } else {
+                    forwardTorque = forwardTorque - ( 1.0f / ( torqueEXP * 0.9f ) );
+                }            
+                
+                if ( forwardTorque < 0.0f ) {
+                    forwardTorque = 0.0f; //so we don't make some strage inverse torque                    
+                }
+            }
+            if ( backwardTorque < 0.0f ) {
+                // keep lowering the torque if we don't press the gas                 
+                if ( handbrake == 0.0f ) {
+                    backwardTorque = backwardTorque + ( 1.0f / ( torqueEXP * 0.4f ) );
+                } else {
+                    backwardTorque = backwardTorque + ( 1.0f / ( torqueEXP * 0.9f ) );
+                }
+                if ( backwardTorque > 0.0f ) {
+                    backwardTorque = 0.0f; //so we don't make some strage inverse torque                    
+                }
+            }
+        }
+        // torque then is an amalgamation of both torques, 
+        // each other canceling out in some circumstances, and making the car far more difficult to use
+        torque = forwardTorque - backwardTorque;
+
+        //add the direction the player is facing to the "force" of the car
+        if ( ( player ) && ( engine >= 0 ) ) {            
+            directionalForce = idMath::Fabs( player->usercmd.forwardmove * veh_force );
+        }
+
+        // if we exit the car we no longer keep pressing the acelerator, 
+        // the car might still move due the action exercised by torque though.
+        // Handbrake is there for the case where the player is still in the car.
+        force = directionalForce * torque * handbrake;
+
+        /*
+        if ( af.GetPhysics()->GetLinearVelocity() < 0.0f ) {
+            //the car is moving backwards, even if the player is not using it
+        }    
+        */
+
+/*
+        if ( player ) {
+			// capture the input from a player
+			velocity = veh_velocity;  // 7318 - moded
+			if ( player->usercmd.forwardmove < 0 ) {
+				velocity = -velocity;
+			}
+			force = idMath::Fabs( player->usercmd.forwardmove * veh_force ) * (1.0f / 128.0f); // 7318 - moded
+			steerAngle = GetSteerAngle();
+		}
+*/
+
+		// update the wheel motor force
+		for ( i = 0; i < 6; i++ ) {
+			wheels[i]->SetContactMotorVelocity( velocity );
+			wheels[i]->SetContactMotorForce( force );
+		}
+
+		// adjust wheel velocity for better steering because there are no differentials between the wheels
+		if ( steerAngle < 0.0f ) {
+			for ( i = 0; i < 3; i++ ) {
+				wheels[(i<<1)]->SetContactMotorVelocity( velocity * 0.5f );
+			}
+		}
+		else if ( steerAngle > 0.0f ) {
+			for ( i = 0; i < 3; i++ ) {
+				wheels[1+(i<<1)]->SetContactMotorVelocity( velocity * 0.5f );
+			}
+		}
+
+		// update the wheel steering
+		steering[0]->SetSteerAngle( steerAngle );
+		steering[1]->SetSteerAngle( steerAngle );
+		steering[2]->SetSteerAngle( -steerAngle );
+		steering[3]->SetSteerAngle( -steerAngle );
+		for ( i = 0; i < 4; i++ ) {
+			steering[i]->SetSteerSpeed( 3.0f );
+		}
+
+		// update the steering wheel
+		animator.GetJointTransform( steeringWheelJoint, gameLocal.time, origin, axis );
+		rotation.SetVec( axis[2] );
+		rotation.SetAngle( -steerAngle );
+		animator.SetJointAxis( steeringWheelJoint, JOINTMOD_WORLD, rotation.ToMat3() );
+
+		// run the physics
+		RunPhysics();
+        
+		// rotate the wheels visually
+		for ( i = 0; i < 6; i++ ) {
+		    if ( force == 0.0f ) {
+		        velocity = wheels[i]->GetLinearVelocity() * wheels[i]->GetWorldAxis()[0];
+			}
+            if ( handbrake == 1.0f ) {  
+	            wheelAngles[i] += velocity * MS2SEC( gameLocal.msec ) / wheelRadius;
+            }
+            /*
+            else {
+                wheelAngles[i] == wheelAngles[i];
+            }
+            */
+			// give the wheel joint an additional rotation about the wheel axis
+			rotation.SetAngle( RAD2DEG( wheelAngles[i] ) );
+		    axis = af.GetPhysics()->GetAxis( 0 );
+		    rotation.SetVec( (wheels[i]->GetWorldAxis() * axis.Transpose())[2] );
+		    animator.SetJointAxis( wheelJoints[i], JOINTMOD_WORLD, rotation.ToMat3() );
+        }
+
+        // spawn dust particle effects
+        if ( force != 0.0f && !( gameLocal.framenum & 7 ) ) {
+            int numContacts;
+            idAFConstraint_Contact *contacts[2];
+            for ( i = 0; i < 6; i++ ) {
+                numContacts = af.GetPhysics()->GetBodyContactConstraints( wheels[i]->GetClipModel()->GetId(), contacts, 2 );
+                for ( int j = 0; j < numContacts; j++ ) {
+                    gameLocal.smokeParticles->EmitSmoke( dustSmoke, gameLocal.time, gameLocal.random.RandomFloat(), contacts[j]->GetContact().point, contacts[j]->GetContact().normal.ToMat3() );
+                }
+            }
+        }
+	}
+
+	UpdateAnimation();
+	if ( thinkFlags & TH_UPDATEVISUALS ) {
+		Present();
+		LinkCombat();
+	}
+    /*
+    if ( ( !lightOn && ( gameLocal.time >= muzzleFlashEnd ) ) || IsHidden() ) {
+		if ( muzzleFlashHandle != -1 ) {
+			gameRenderWorld->FreeLightDef( muzzleFlashHandle );
+			muzzleFlashHandle = -1;
+		}
+	}
+    */
+
+	// update the muzzle flash light, so it moves with the gun
+	if ( headlightsHandle != -1 ) {
+		UpdateHeadlightsPosition();
+         gameRenderWorld->UpdateLightDef( headlightsHandle, &r_headlights );
+		
+        /*
+		// wake up monsters with the flashlight
+		if ( !gameLocal.isMultiplayer && lightOn && !owner->fl.notarget ) {
+			AlertMonsters();
+		}
+        */
+	}
+    
 }
 
 /*
@@ -2156,7 +2556,6 @@ void idAFEntity_VehicleSimple::Think( void ) {
 	}
 }
 
-
 /*
 ===============================================================================
 
@@ -2331,329 +2730,6 @@ void idAFEntity_VehicleFourWheels::Think( void ) {
 		Present();
 		LinkCombat();
 	}
-}
-
-
-/*
-===============================================================================
-
-  idAFEntity_VehicleSixWheels
-
-===============================================================================
-*/
-
-CLASS_DECLARATION( idAFEntity_Wheeled_Vehicle, idAFEntity_VehicleSixWheels )
-END_CLASS
-
-	/*
-================
-idAFEntity_VehicleSixWheels::idAFEntity_VehicleSixWheels
-================
-*/
-idAFEntity_VehicleSixWheels::idAFEntity_VehicleSixWheels( void ) {
-	int i;
-
-	for ( i = 0; i < 6; i++ ) {
-		wheels[i]		= NULL;
-		wheelJoints[i]	= INVALID_JOINT;
-		wheelAngles[i]	= 0.0f;
-	}
-	steering[0]			= NULL;
-	steering[1]			= NULL;
-	steering[2]			= NULL;
-	steering[3]			= NULL;
-}
-
-/*
-================
-idAFEntity_VehicleSixWheels::Spawn
-================
-*/
-void idAFEntity_VehicleSixWheels::Spawn( void ) {
-	int i;
-	static const char *wheelBodyKeys[] = {
-		"wheelBodyFrontLeft",
-		"wheelBodyFrontRight",
-		"wheelBodyMiddleLeft",
-		"wheelBodyMiddleRight",
-		"wheelBodyRearLeft",
-		"wheelBodyRearRight"
-	};
-	static const char *wheelJointKeys[] = {
-		"wheelJointFrontLeft",
-		"wheelJointFrontRight",
-		"wheelJointMiddleLeft",
-		"wheelJointMiddleRight",
-		"wheelJointRearLeft",
-		"wheelJointRearRight"
-	};
-	static const char *steeringHingeKeys[] = {
-		"steeringHingeFrontLeft",
-		"steeringHingeFrontRight",
-		"steeringHingeRearLeft",
-		"steeringHingeRearRight"
-	};
-
-	const char *wheelBodyName, *wheelJointName, *steeringHingeName;
-
-	for ( i = 0; i < 6; i++ ) {
-		wheelBodyName = spawnArgs.GetString( wheelBodyKeys[i], "" );
-		if ( !wheelBodyName[0] ) {
-			gameLocal.Error( "idAFEntity_VehicleSixWheels '%s' no '%s' specified", name.c_str(), wheelBodyKeys[i] );
-		}
-		wheels[i] = af.GetPhysics()->GetBody( wheelBodyName );
-		if ( !wheels[i] ) {
-			gameLocal.Error( "idAFEntity_VehicleSixWheels '%s' can't find wheel body '%s'", name.c_str(), wheelBodyName );
-		}
-		wheelJointName = spawnArgs.GetString( wheelJointKeys[i], "" );
-		if ( !wheelJointName[0] ) {
-			gameLocal.Error( "idAFEntity_VehicleSixWheels '%s' no '%s' specified", name.c_str(), wheelJointKeys[i] );
-		}
-		wheelJoints[i] = animator.GetJointHandle( wheelJointName );
-		if ( wheelJoints[i] == INVALID_JOINT ) {
-			gameLocal.Error( "idAFEntity_VehicleSixWheels '%s' can't find wheel joint '%s'", name.c_str(), wheelJointName );
-		}
-	}
-
-	for ( i = 0; i < 4; i++ ) {
-		steeringHingeName = spawnArgs.GetString( steeringHingeKeys[i], "" );
-		if ( !steeringHingeName[0] ) {
-			gameLocal.Error( "idAFEntity_VehicleSixWheels '%s' no '%s' specified", name.c_str(), steeringHingeKeys[i] );
-		}
-		steering[i] = static_cast<idAFConstraint_Hinge *>(af.GetPhysics()->GetConstraint( steeringHingeName ));
-		if ( !steering[i] ) {
-			gameLocal.Error( "idAFEntity_VehicleSixWheels '%s': can't find steering hinge '%s'", name.c_str(), steeringHingeName );
-		}
-	}
-
-	memset( wheelAngles, 0, sizeof( wheelAngles ) );
-	BecomeActive( TH_THINK );
-}
-
-/*
-================
-idAFEntity_VehicleSixWheels::Think
-================
-*/
-void idAFEntity_VehicleSixWheels::Think( void ) {
-	int i;
-	float force = 0.0f, velocity = 0.0f, steerAngle = 0.0f, directionalForce = 0.0f, torqueEXP = 256.0f;
-    idVec3 origin;
-	idMat3 axis;
-	idRotation rotation;
-
-	if ( thinkFlags & TH_THINK ) {
-
-		if ( player ) {
-			velocity = veh_velocity;
-            steerAngle = GetSteerAngle();
-        }
-
-	    if ( ( player ) && ( engine >= 0 ) && ( player->usercmd.forwardmove < 0 ) ) {
-            // backwards
-		    velocity = -velocity;
-            if ( backwards == false ) {
-                //since this sound loops I use this in order to start it only once
-                StartSound( "snd_alarm", SND_CHANNEL_DEMONIC, 0, false, NULL );
-                backwards = true;
-            }            
-		} else {
-            StopSound(SND_CHANNEL_DEMONIC, NULL); // stop bacwards sound
-            backwards = false;
-        }
-
-        if ( ( player ) && ( player->usercmd.upmove > 0 ) ) {
-            //stop the car because we're handbreaking, even if the engine is turned off
-            if ( handbrake == 1.0f ) {
-                StartSound( "snd_handbrake", SND_CHANNEL_VOICE, 0, false, NULL );
-                if ( ( engine == 1 ) && ( skid == false ) ) { 
-                //FIXME insted of checking for the engine, check for the actualk speed of the car
-                    //since this sound loops I use this in order to start it only once
-                    StartSound( "snd_skid", SND_CHANNEL_BODY2, 0, false, NULL );
-                    skid = true;
-                }
-                handbrake = 0.0f; // handbrake overrides the force of the car dividing it by zero
-            }            
-        } else {
-            handbrake = 1.0f;
-            StopSound(SND_CHANNEL_BODY2, NULL); //stop the skid sound
-            skid = false;
-        }
-
-        if ( !player ) {
-            if ( engine == 1 ) {
-                StopSound(SND_CHANNEL_BODY, NULL); // stop the gas sound
-                //since this sound loops I use this in order to start it only once
-                StartSound( "snd_engine_idle", SND_CHANNEL_BODY, 0, false, NULL );
-                engine = 0;
-            }
-        } else {
-            if ( ( player->usercmd.forwardmove != 0 ) && ( engine == 0 ) ) {
-                //since this sound loops I use this in order to start it only once
-                StopSound(SND_CHANNEL_BODY, NULL); // stop the idle sound
-                StartSound( "snd_engine_gas", SND_CHANNEL_BODY, 0, false, NULL );
-                engine = 1;
-            }
-            if ( player->usercmd.forwardmove > 0 ) {
-                if ( engine == 1 ) {
-                    if ( forwardTorque < maxTorque ) {
-                        //keep rising the torque gradually
-                        forwardTorque = forwardTorque + ( 1.0f / ( torqueEXP * 0.6f ) ); 
-                                
-                        if ( forwardTorque > maxTorque ) {
-                            forwardTorque = maxTorque; // keep it clean
-                        }
-                    }
-                } 
-            } else if ( player->usercmd.forwardmove < 0 ) {
-                if ( engine == 1 ) {
-                    if ( backwardTorque > -maxTorque ) {
-                        //keep lowering the torque gradually
-                        backwardTorque = backwardTorque - ( 1.0f / ( torqueEXP * 0.6f ) ); 
-                                
-                        if ( backwardTorque < -maxTorque ) {
-                            backwardTorque = -maxTorque; // keep it clean
-                        }
-                    }
-                }
-             } else if ( player->usercmd.forwardmove == 0 ) {                    
-                StopSound(SND_CHANNEL_BODY2, NULL); //stop the skid sound
-                if ( engine == 1 ) {
-                    StopSound(SND_CHANNEL_BODY, NULL); // stop the gas sound
-                    //since this sound loops I use this in order to start it only once
-                    StartSound( "snd_engine_idle", SND_CHANNEL_BODY, 0, false, NULL );
-                    engine = 0;
-                }      
-            }
-        }
-
-
-        if ( ( !player ) || ( engine == -1 ) || ( ( player ) && ( player->usercmd.forwardmove == 0 ) ) ) {
-            //TODO add torque reduction due steering
-            // if we leave the car or stop the engine keep lowering the torque
-            if ( forwardTorque > 0.0f ) {
-                forwardTorque = forwardTorque - ( 1.0f / ( torqueEXP * 0.9f ) ); 
-                // keep lowering the torque if we don't press the gas
-                if ( forwardTorque < 0.0f ) {
-                    forwardTorque = 0.0f; //so we don't make some strage inverse torque                    
-                }
-            }
-            if ( backwardTorque < 0.0f ) {
-                backwardTorque = backwardTorque + ( 1.0f / ( torqueEXP * 0.9f ) ); 
-                // keep lowering the torque if we don't press the gas
-                if ( backwardTorque > 0.0f ) {
-                    backwardTorque = 0.0f; //so we don't make some strage inverse torque                    
-                }
-            }
-        }
-        // torque then is an amalgamation of both torques, 
-        // each other canceling out in some circumstances, and making the car far more difficult to use
-        torque = forwardTorque - backwardTorque;
-
-        //add the direction the player is facing to the "force" of the car
-        if ( ( player ) && ( engine >= 0 ) ) {            
-            directionalForce = idMath::Fabs( player->usercmd.forwardmove * veh_force );
-        }
-
-        // if we exit the car we no longer keep pressing the acelerator, 
-        // the car might still move due the action exercised by torque though.
-        // Handbrake is there for the case where the player is still in the car.
-        force = directionalForce * torque * handbrake;
-
-        /*
-        if ( af.GetPhysics()->GetLinearVelocity() < 0.0f ) {
-            //the car is moving backwards, even if the player is not using it
-        }    
-        */
-
-/*
-        if ( player ) {
-			// capture the input from a player
-			velocity = veh_velocity;  // 7318 - moded
-			if ( player->usercmd.forwardmove < 0 ) {
-				velocity = -velocity;
-			}
-			force = idMath::Fabs( player->usercmd.forwardmove * veh_force ) * (1.0f / 128.0f); // 7318 - moded
-			steerAngle = GetSteerAngle();
-		}
-*/
-
-		// update the wheel motor force
-		for ( i = 0; i < 6; i++ ) {
-			wheels[i]->SetContactMotorVelocity( velocity );
-			wheels[i]->SetContactMotorForce( force );
-		}
-
-		// adjust wheel velocity for better steering because there are no differentials between the wheels
-		if ( steerAngle < 0.0f ) {
-			for ( i = 0; i < 3; i++ ) {
-				wheels[(i<<1)]->SetContactMotorVelocity( velocity * 0.5f );
-			}
-		}
-		else if ( steerAngle > 0.0f ) {
-			for ( i = 0; i < 3; i++ ) {
-				wheels[1+(i<<1)]->SetContactMotorVelocity( velocity * 0.5f );
-			}
-		}
-
-		// update the wheel steering
-		steering[0]->SetSteerAngle( steerAngle );
-		steering[1]->SetSteerAngle( steerAngle );
-		steering[2]->SetSteerAngle( -steerAngle );
-		steering[3]->SetSteerAngle( -steerAngle );
-		for ( i = 0; i < 4; i++ ) {
-			steering[i]->SetSteerSpeed( 3.0f );
-		}
-
-		// update the steering wheel
-		animator.GetJointTransform( steeringWheelJoint, gameLocal.time, origin, axis );
-		rotation.SetVec( axis[2] );
-		rotation.SetAngle( -steerAngle );
-		animator.SetJointAxis( steeringWheelJoint, JOINTMOD_WORLD, rotation.ToMat3() );
-
-		// run the physics
-		RunPhysics();
-        
-		// rotate the wheels visually
-		for ( i = 0; i < 6; i++ ) {
-		    if ( force == 0.0f ) {
-		        velocity = wheels[i]->GetLinearVelocity() * wheels[i]->GetWorldAxis()[0];
-			}
-            if ( handbrake == 1.0f ) {  
-	            wheelAngles[i] += velocity * MS2SEC( gameLocal.msec ) / wheelRadius;
-            }
-            /*
-            else {
-                wheelAngles[i] == wheelAngles[i];
-            }
-            */
-			// give the wheel joint an additional rotation about the wheel axis
-			rotation.SetAngle( RAD2DEG( wheelAngles[i] ) );
-		    axis = af.GetPhysics()->GetAxis( 0 );
-		    rotation.SetVec( (wheels[i]->GetWorldAxis() * axis.Transpose())[2] );
-		    animator.SetJointAxis( wheelJoints[i], JOINTMOD_WORLD, rotation.ToMat3() );
-        }
-
-        // spawn dust particle effects
-        if ( force != 0.0f && !( gameLocal.framenum & 7 ) ) {
-            int numContacts;
-            idAFConstraint_Contact *contacts[2];
-            for ( i = 0; i < 6; i++ ) {
-                numContacts = af.GetPhysics()->GetBodyContactConstraints( wheels[i]->GetClipModel()->GetId(), contacts, 2 );
-                for ( int j = 0; j < numContacts; j++ ) {
-                    gameLocal.smokeParticles->EmitSmoke( dustSmoke, gameLocal.time, gameLocal.random.RandomFloat(), contacts[j]->GetContact().point, contacts[j]->GetContact().normal.ToMat3() );
-                }
-            }
-        }
-	}
-
-	UpdateAnimation();
-	if ( thinkFlags & TH_UPDATEVISUALS ) {
-		Present();
-		LinkCombat();
-	}
-    // update light pos
-    //GetGlobalJointTransform( true, headlightsJoint, headlights_l.origin, headlights_l.axis );
 }
 // 7318 - vehicle - end
 
