@@ -1575,7 +1575,6 @@ void idAFEntity_WithAttachedHead::Event_Activate( idEntity *activator ) {
 }
 
 // 7318 - vehicle - start
-
 /*
 ===============================================================================
 
@@ -1711,8 +1710,7 @@ idAFEntity_Wheeled_Vehicle::idAFEntity_Wheeled_Vehicle( void ) {
 
     headlightsEnd       = 0;   
     headlightsHandle    = -1;
-    //headlightsAxis.Identity();
-    //headlightsOrigin.Zero();
+    taillightsHandle    = -1;
 
 
     //vehicle individual lights status
@@ -1790,7 +1788,7 @@ void idAFEntity_Wheeled_Vehicle::Spawn( void ) {
 	player = NULL;
 	steerAngle = 0.0f;
 
-    //LIGHT
+    //HEADLIGHT
     
 	headlightsJoint = animator.GetJointHandle( spawnArgs.GetString( "headlightsJoint", "mid_headlight" ) );
 
@@ -1801,35 +1799,64 @@ void idAFEntity_Wheeled_Vehicle::Spawn( void ) {
 	float			headlightsRadius;
 	bool			headlightsPointLight;
 
-	spawnArgs.GetString( "mtr_flashShader", "", &shader );
+	spawnArgs.GetString( "mtr_headlightShader", "", &shader );
 	headlightsShader = declManager->FindMaterial( shader, false );
-	headlightsPointLight = spawnArgs.GetBool( "flashPointLight", "1" );
-	spawnArgs.GetVector( "flashColor", "1 1 1", headlightsColor );
-	headlightsRadius		= (float)spawnArgs.GetInt( "flashRadius" );	// if 0, no light will spawn
-	headlightsTime          = SEC2MS( spawnArgs.GetFloat( "flashTime", "0.25" ) );
-	headlightsTarget		= spawnArgs.GetVector( "flashTarget" );
-	headlightsUp			= spawnArgs.GetVector( "flashUp" );
-	headlightsRight         = spawnArgs.GetVector( "flashRight" );
+	headlightsPointLight = spawnArgs.GetBool( "headlightPointLight", "1" );
+	spawnArgs.GetVector( "headlightColor", "1 1 1", headlightsColor );
+	headlightsRadius		= (float)spawnArgs.GetInt( "headlightRadius" );	// if 0, no light will spawn
+	headlightsTime          = SEC2MS( spawnArgs.GetFloat( "headlightTime", "0.25" ) );
+	headlightsTarget		= spawnArgs.GetVector( "headlightTarget" );
+	headlightsUp			= spawnArgs.GetVector( "headlightUp" );
+	headlightsRight         = spawnArgs.GetVector( "headlightRight" );
 
-    memset( &r_headlights, 0, sizeof( r_headlights ) );
+    memset( &l_headlights, 0, sizeof( l_headlights ) );
 
-    r_headlights.pointLight								= headlightsPointLight;
-	r_headlights.shader									= headlightsShader;
-	r_headlights.shaderParms[ SHADERPARM_RED ]			= headlightsColor[0];
-	r_headlights.shaderParms[ SHADERPARM_GREEN ]		    = headlightsColor[1];
-	r_headlights.shaderParms[ SHADERPARM_BLUE ]			= headlightsColor[2];
-	r_headlights.shaderParms[ SHADERPARM_TIMESCALE ]	    = 1.0f;
+    l_headlights.pointLight								= headlightsPointLight;
+	l_headlights.shader									= headlightsShader;
+	l_headlights.shaderParms[ SHADERPARM_RED ]			= headlightsColor[0];
+	l_headlights.shaderParms[ SHADERPARM_GREEN ]		= headlightsColor[1];
+	l_headlights.shaderParms[ SHADERPARM_BLUE ]			= headlightsColor[2];
+	l_headlights.shaderParms[ SHADERPARM_TIMESCALE ]	= 1.0f;
 
-	r_headlights.lightRadius[0]							= headlightsRadius;
-	r_headlights.lightRadius[1]							= headlightsRadius;
-	r_headlights.lightRadius[2]							= headlightsRadius;
+	l_headlights.lightRadius[0]							= headlightsRadius;
+	l_headlights.lightRadius[1]							= headlightsRadius;
+	l_headlights.lightRadius[2]							= headlightsRadius;
 
 	if ( !headlightsPointLight ) {
-		r_headlights.target								= headlightsTarget;
-		r_headlights.up									= headlightsUp;
-		r_headlights.right								= headlightsRight;
-		r_headlights.end								    = headlightsTarget;
+		l_headlights.target								= headlightsTarget;
+		l_headlights.up									= headlightsUp;
+		l_headlights.right								= headlightsRight;
+		l_headlights.end								= headlightsTarget;
 	}
+
+    //TAILLIGHT
+
+    //bool			taillightsPointLight;
+    //const idMaterial*headlightsShader;
+    
+	taillightsJoint = animator.GetJointHandle( spawnArgs.GetString( "taillightsJoint", "mid_headlight" ) );
+
+	spawnArgs.GetString( "mtr_taillightShader", "", &shader );
+	taillightsShader = declManager->FindMaterial( shader, false );
+    taillightsPointLight = spawnArgs.GetBool( "taillightPointLight", "1" );
+	spawnArgs.GetVector( "taillightColor", "1 1 1", taillightsColor );
+	taillightsRadius		= (float)spawnArgs.GetInt( "taillightRadius" );	// if 0, no light will spawn
+	taillightsTime          = SEC2MS( spawnArgs.GetFloat( "taillightTime", "0.25" ) );
+	
+
+    memset( &l_taillights, 0, sizeof( l_taillights ) );
+
+    l_taillights.pointLight								= taillightsPointLight;
+	l_taillights.shader									= taillightsShader;
+	l_taillights.shaderParms[ SHADERPARM_RED ]			= taillightsColor[0];
+	l_taillights.shaderParms[ SHADERPARM_GREEN ]		= taillightsColor[1];
+	l_taillights.shaderParms[ SHADERPARM_BLUE ]			= taillightsColor[2];
+	l_taillights.shaderParms[ SHADERPARM_TIMESCALE ]	= 1.0f;
+
+	l_taillights.lightRadius[0]							= taillightsRadius;
+	l_taillights.lightRadius[1]							= taillightsRadius;
+	l_taillights.lightRadius[2]							= taillightsRadius;
+
 
     if ( engine == 0 ) {
         StartSound( "snd_engine_idle", SND_CHANNEL_BODY, 0, false, NULL );
@@ -1894,15 +1921,13 @@ float idAFEntity_Wheeled_Vehicle::GetSteerAngle( void ) {
 
 /*
 ================
-idAFEntity_Wheeled_Vehicle::UpdateHeadlightsPosition
+idAFEntity_Wheeled_Vehicle::UpdatelightsPosition
 ================
 */
-void idAFEntity_Wheeled_Vehicle::UpdateHeadlightsPosition( void ) {
+void idAFEntity_Wheeled_Vehicle::UpdatelightsPosition( void ) {
 	// the flash has an explicit joint for locating it
-	GetGlobalJointTransform( headlightsJoint, r_headlights.origin, r_headlights.axis );
-
-//    r_headlights.origin = af.GetPhysics()->GetOrigin();
-//    r_headlights.axis = af.GetPhysics()->GetAxis();
+	GetGlobalJointTransform( headlightsJoint, l_headlights.origin, l_headlights.axis );
+    GetGlobalJointTransform( taillightsJoint, l_taillights.origin, l_taillights.axis );
 
     /*
 	// if the desired point is inside or very close to a wall, back it up until it is clear
@@ -1938,27 +1963,27 @@ void idAFEntity_Wheeled_Vehicle::ToggleHeadlights( void ) {
 		    return;
 	    }
         
-        if ( !r_headlights.lightRadius[0] ) {
+        if ( !l_headlights.lightRadius[0] ) {
 		    return;
 	    }
         // LIGHTS ON
         StartSound( "snd_switch_on", SND_CHANNEL_ANY, 0, false, NULL );
 
-        UpdateHeadlightsPosition();
+        UpdatelightsPosition();
 
-        r_headlights.shaderParms[ SHADERPARM_TIMEOFFSET ] = -MS2SEC( gameLocal.time );
-        r_headlights.shaderParms[ SHADERPARM_DIVERSITY ] = renderEntity.shaderParms[ SHADERPARM_DIVERSITY ];
+        l_headlights.shaderParms[ SHADERPARM_TIMEOFFSET ] = -MS2SEC( gameLocal.time );
+        l_headlights.shaderParms[ SHADERPARM_DIVERSITY ] = renderEntity.shaderParms[ SHADERPARM_DIVERSITY ];
 
 
         headlightsEnd = gameLocal.time + headlightsTime;
 
         if ( headlightsHandle != -1 ) {
-		    gameRenderWorld->UpdateLightDef( headlightsHandle, &r_headlights );
+		    gameRenderWorld->UpdateLightDef( headlightsHandle, &l_headlights );
         } else {
-		    headlightsHandle = gameRenderWorld->AddLightDef( &r_headlights );
+		    headlightsHandle = gameRenderWorld->AddLightDef( &l_headlights );
         }       
 
-        gameLocal.Printf( "lights ON\n" ); //debug
+        //gameLocal.Printf( "lights ON\n" ); //debug
         /*
         if ( headlight_l == -1 ) { //7318 the light is broken
             headlight_l = 0;
@@ -1981,7 +2006,7 @@ void idAFEntity_Wheeled_Vehicle::ToggleHeadlights( void ) {
             headlightsHandle = -1;
             headlightsEnd = 0;
         }
-        gameLocal.Printf( "lights OFF\n" ); //debug
+        //gameLocal.Printf( "lights OFF\n" ); //debug
         //headlight_l = 0;
         //headlight_r = 0; 
         headlights = false;
@@ -2150,11 +2175,42 @@ void idAFEntity_VehicleSixWheels::Think( void ) {
                     skid = true;
                 }
                 handbrake = 0.0f; // handbrake overrides the force of the car dividing it by zero
+                // TAILLIGHTS ON
+                // first the checks if the light could actually be there
+                if ( taillightsJoint == INVALID_JOINT ) {
+		            return;
+	            }
+        
+                if ( !l_taillights.lightRadius[0] ) {
+		            return;
+	            }
+                // the actual light goes ON
+
+                UpdatelightsPosition();
+
+                l_taillights.shaderParms[ SHADERPARM_TIMEOFFSET ] = -MS2SEC( gameLocal.time );
+                l_taillights.shaderParms[ SHADERPARM_DIVERSITY ] = renderEntity.shaderParms[ SHADERPARM_DIVERSITY ];
+
+
+                //taillightsEnd = gameLocal.time + taillightsTime;
+
+                if ( taillightsHandle != -1 ) {
+		            gameRenderWorld->UpdateLightDef( taillightsHandle, &l_taillights );
+                } else {
+		            taillightsHandle = gameRenderWorld->AddLightDef( &l_taillights );
+                }  
             }            
         } else {
             handbrake = 1.0f;
             StopSound(SND_CHANNEL_BODY2, NULL); //stop the skid sound
             skid = false;
+            // TAILLIGHTS
+            if ( taillightsHandle != -1 ) {
+                // the actual light goes OFF
+		        gameRenderWorld->FreeLightDef( taillightsHandle );
+                taillightsHandle = -1;
+                //taillightsEnd = 0;
+            }
         }
 
         if ( !player ) {
@@ -2351,8 +2407,8 @@ void idAFEntity_VehicleSixWheels::Think( void ) {
 
 	// update the muzzle flash light, so it moves with the gun
 	if ( headlightsHandle != -1 ) {
-		UpdateHeadlightsPosition();
-         gameRenderWorld->UpdateLightDef( headlightsHandle, &r_headlights );
+	    UpdatelightsPosition();
+        gameRenderWorld->UpdateLightDef( headlightsHandle, &l_headlights );
 		
         /*
 		// wake up monsters with the flashlight
@@ -2360,6 +2416,10 @@ void idAFEntity_VehicleSixWheels::Think( void ) {
 			AlertMonsters();
 		}
         */
+	}
+    if ( taillightsHandle != -1 ) {
+	    UpdatelightsPosition();
+        gameRenderWorld->UpdateLightDef( taillightsHandle, &l_taillights );
 	}
     
 }

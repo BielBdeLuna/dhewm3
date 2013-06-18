@@ -30,6 +30,9 @@ If you have questions concerning this license or the applicable additional terms
 #define __GAME_AFENTITY_H__
 
 #include "physics/Physics_AF.h"
+#include "idlib/geometry/JointTransform.h"
+#include "renderer/ModelManager.h"
+
 #include "physics/Force_Constant.h"
 #include "Entity.h"
 #include "AF.h"
@@ -310,7 +313,6 @@ private:
 	void					Event_Activate( idEntity *activator );
 };
 
-
 /*
 ===============================================================================
 
@@ -355,13 +357,14 @@ public:
     void                    ToggleEngine( void );
 
 //private:
-    void                    UpdateHeadlightsPosition();
+    void                    UpdatelightsPosition();
     idAFEntity_Wheeled_Vehicle *    car;
 
 
 protected:
 	jointHandle_t			steeringWheelJoint;
     jointHandle_t			headlightsJoint;
+    jointHandle_t			taillightsJoint;
 
 	float					wheelRadius;
 	float					steerAngle;
@@ -405,13 +408,26 @@ protected:
     int                     blinklight_l;
     int                     blinklight_r;
     
-    renderLight_t			r_headlights;
+    renderLight_t			l_headlights;
+    
     idVec3					headlightsColor;
 	int						headlightsEnd;
 	int						headlightsTime;
 	int						headlightsHandle;
     idVec3					headlightsOrigin;
 	idMat3					headlightsAxis;
+
+    renderLight_t			l_taillights;
+
+    const idMaterial*taillightsShader;
+    idVec3					taillightsColor;
+    int						taillightsEnd; //what is this?
+    bool			        taillightsPointLight;
+    float			        taillightsRadius;
+    int						taillightsTime;
+    int						taillightsHandle;
+    idVec3					taillightsOrigin;
+	idMat3					taillightsAxis;
                      
 };
 
