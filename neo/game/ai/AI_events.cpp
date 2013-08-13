@@ -31,6 +31,11 @@ If you have questions concerning this license or the applicable additional terms
 #include "Misc.h"
 
 #include "gamesys/SysCvar.h"
+//7318 - AImod start
+#include "script/Script_Thread.h"
+#include "Moveable.h"
+//7318 - AImod end
+
 #include "ai/AI.h"
 
 /***********************************************************************
@@ -78,7 +83,7 @@ const idEventDef AI_MoveToEnemyHeight( "moveToEnemyHeight" );
 const idEventDef AI_MoveOutOfRange( "moveOutOfRange", "ef" );
 const idEventDef AI_MoveToAttackPosition( "moveToAttackPosition", "es" );
 const idEventDef AI_Wander( "wander" );
-const idEventDef AI_MoveToEntity( "moveToEntity", "e" );
+const idEventDef AI_MoveToEntity( "moveAImodToEntity", "e" );
 const idEventDef AI_MoveToPosition( "moveToPosition", "v" );
 const idEventDef AI_SlideTo( "slideTo", "vf" );
 const idEventDef AI_FacingIdeal( "facingIdeal", NULL, 'd' );
@@ -162,6 +167,10 @@ const idEventDef AI_CanReachPosition( "canReachPosition", "v", 'd' );
 const idEventDef AI_CanReachEntity( "canReachEntity", "E", 'd' );
 const idEventDef AI_CanReachEnemy( "canReachEnemy", NULL, 'd' );
 const idEventDef AI_GetReachableEntityPosition( "getReachableEntityPosition", "e", 'v' );
+//7318 - AImod start
+const idEventDef AI_ChooseObjectToThrow( "chooseObjectToThrow", "vvfff", 'e' );
+const idEventDef AI_ThrowObjectAtEnemy( "throwObjectAtEnemy", "ef" );
+//7318 - AImod end
 
 CLASS_DECLARATION( idActor, idAI )
 	EVENT( EV_Activate,							idAI::Event_Activate )
@@ -218,7 +227,7 @@ CLASS_DECLARATION( idActor, idAI )
 	EVENT( AI_WaitMove,							idAI::Event_WaitMove )
 	EVENT( AI_GetJumpVelocity,					idAI::Event_GetJumpVelocity )
 	EVENT( AI_EntityInAttackCone,				idAI::Event_EntityInAttackCone )
-	EVENT( AI_CanSeeEntity,						idAI::Event_CanSeeEntity )
+	EVENT( AI_CanSeeEntity,     				idAI::Event_CanSeeEntity )
 	EVENT( AI_SetTalkTarget,					idAI::Event_SetTalkTarget )
 	EVENT( AI_GetTalkTarget,					idAI::Event_GetTalkTarget )
 	EVENT( AI_SetTalkState,						idAI::Event_SetTalkState )
@@ -292,6 +301,10 @@ CLASS_DECLARATION( idActor, idAI )
 	EVENT( AI_CanReachEntity,					idAI::Event_CanReachEntity )
 	EVENT( AI_CanReachEnemy,					idAI::Event_CanReachEnemy )
 	EVENT( AI_GetReachableEntityPosition,		idAI::Event_GetReachableEntityPosition )
+    //7318 - AImod start
+    EVENT( AI_ChooseObjectToThrow,              idAI::Event_ChooseObjectToThrow )
+	EVENT( AI_ThrowObjectAtEnemy,               idAI::Event_ThrowObjectAtEnemy )
+    //7318 - AImod end
 END_CLASS
 
 /*
@@ -2706,3 +2719,96 @@ void idAI::Event_GetReachableEntityPosition( idEntity *ent ) {
 
 	idThread::ReturnVector( pos );
 }
+//7318 - AImod start
+/*
+================
+idAI::Event_ChooseObjectToThrow
+================
+*/
+void idAI::Event_ChooseObjectToThrow( const idVec3 &mins, const idVec3 &maxs, float speed, float minDist, float offset ) {
+	idEntity *	ent;
+	idEntity *	entityList[ MAX_GENTITIES ];
+	int			numListedEntities;
+	int			i, index;
+	float		dist;
+	idVec3		vel;
+	idVec3		offsetVec( 0, 0, offset );
+	idEntity	*enemyEnt = enemy.GetEntity();
+
+	if ( !enemyEnt ) {
+		idThread::ReturnEntity( NULL );
+	}
+
+	idVec3 enemyEyePos = lastVisibleEnemyPos + lastVisibleEnemyEyeOffset;
+	const idBounds &myBounds = physicsObj.GetAbsBounds();
+	idBounds checkBounds( mins, maxs );
+	checkBounds.TranslateSelf( physicsObj.GetOrigin() );
+	numListedEntities = gameLocal.clip.EntitiesTouchingBounds( checkBounds, -1, entityList, MAX_GENTITIES );
+
+	index = gameLocal.random.RandomInt( numListedEntities );
+	for ( i = 0; i < numListedEntities; i++, index++ ) {
+		if ( index >= numListedEntities ) {
+			index = 0;
+		}
+		ent = entityList[ index ];
+		if ( !ent->IsType( idMoveable::Type ) ) {
+			continue;
+		}
+
+		if ( ent->fl.hidden ) {
+			// don't throw hidden objects
+			continue;
+		}
+
+		idPhysics *entPhys = ent->GetPhysics();
+		const idVec3 &entOrg = entPhys->GetOrigin();
+		dist = ( entOrg - enemyEyePos ).LengthFast();
+		if ( dist < minDist ) {
+			continue;
+		}
+
+		idBounds expandedBounds = myBounds.Expand( entPhys->GetBounds().GetRadius() );
+		if ( expandedBounds.LineIntersection( entOrg, enemyEyePos ) ) {
+			// ignore objects that are behind us
+			continue;
+		}
+
+		if ( PredictTrajectory( entPhys->GetOrigin() + offsetVec, enemyEyePos, speed, entPhys->GetGravity(),
+			entPhys->GetClipModel(), entPhys->GetClipMask(), MAX_WORLD_SIZE, NULL, enemyEnt, ai_debugTrajectory.GetBool() ? 4000 : 0, vel ) ) {
+			idThread::ReturnEntity( ent );
+			return;
+		}
+	}
+
+	idThread::ReturnEntity( NULL );
+}
+
+/*
+================
+idAI::Event_ThrowObjectAtEnemy
+================
+*/
+void idAI::Event_ThrowObjectAtEnemy( idEntity *ent, float speed ) {
+	idVec3		vel;
+	idEntity	*enemyEnt;
+	idPhysics	*entPhys;
+
+	entPhys	= ent->GetPhysics();
+	enemyEnt = enemy.GetEntity();
+	if ( !enemyEnt ) {
+		vel = ( viewAxis[ 0 ] * physicsObj.GetGravityAxis() ) * speed;
+	} else {
+		PredictTrajectory( entPhys->GetOrigin(), lastVisibleEnemyPos + lastVisibleEnemyEyeOffset, speed, entPhys->GetGravity(),
+			entPhys->GetClipModel(), entPhys->GetClipMask(), MAX_WORLD_SIZE, NULL, enemyEnt, ai_debugTrajectory.GetBool() ? 4000 : 0, vel );
+		vel *= speed;
+	}
+
+	entPhys->SetLinearVelocity( vel );
+
+	if ( ent->IsType( idMoveable::Type ) ) {
+		idMoveable *ment = static_cast<idMoveable*>( ent );
+		ment->EnableDamage( true, 2.5f );
+	}
+}
+//7318 - AImod end
+//EOF

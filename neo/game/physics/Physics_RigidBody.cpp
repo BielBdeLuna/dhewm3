@@ -97,6 +97,8 @@ void idPhysics_RigidBody::Integrate( float deltaTime, rigidBodyPState_t &next ) 
 
 	// apply gravity
 	next.i.linearMomentum += deltaTime * gravityVector * mass;
+    //physics fix by Lloyd @ http://www.doom3world.org/phpbb2/viewtopic.php?f=57&t=10063&st=0&sk=t&sd=a&start=20
+    //next.i.linearMomentum += deltaTime * (gravityVector + current.externalForce) * mass;
 
 	current.i.orientation.TransposeSelf();
 	next.i.orientation.TransposeSelf();
@@ -1372,6 +1374,20 @@ bool idPhysics_RigidBody::EvaluateContacts( void ) {
 	contacts.SetNum( num, false );
 
 	AddContactEntitiesForContacts();
+    
+    //physics fix by Lloyd @ http://www.doom3world.org/phpbb2/viewtopic.php?f=57&t=10063&st=0&sk=t&sd=a&start=20
+    /*    
+    contactInfo_t ci;
+    idEntity *e = NULL;
+    int i;
+    
+    for( i = 0; i < num; i++ ) {
+        ci = this->GetContact( i );
+        e = gameLocal.entities[ ci.entityNum ];
+        e->AddForce( this->self, ci.id, ci.point, this->gravityVector );
+    }
+    // physics fix -> END
+    */
 
 	return ( contacts.Num() != 0 );
 }

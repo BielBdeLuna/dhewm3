@@ -664,6 +664,10 @@ protected:
 	void					Event_CanReachEntity( idEntity *ent );
 	void					Event_CanReachEnemy( void );
 	void					Event_GetReachableEntityPosition( idEntity *ent );
+    //7318 - AImod start
+    void	                Event_ChooseObjectToThrow( const idVec3 &mins, const idVec3 &maxs, float speed, float minDist, float offset );
+	void	                Event_ThrowObjectAtEnemy( idEntity *ent, float speed );
+    //7318 - AImod end
 };
 
 class idCombatNode : public idEntity {

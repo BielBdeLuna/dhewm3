@@ -357,7 +357,7 @@ public:
     void                    ToggleEngine( void );
 
 //private:
-    void                    UpdatelightsPosition();
+    void                    UpdatelightPositions();
     idAFEntity_Wheeled_Vehicle *    car;
 
 
@@ -421,7 +421,6 @@ protected:
 
     const idMaterial*taillightsShader;
     idVec3					taillightsColor;
-    int						taillightsEnd; //what is this?
     bool			        taillightsPointLight;
     float			        taillightsRadius;
     int						taillightsTime;

@@ -544,7 +544,7 @@ set(src_game
 	game/ai/AI.cpp
 	game/ai/AI_events.cpp
 	game/ai/AI_pathing.cpp
-	game/ai/AI_Vagary.cpp
+	#game/ai/AI_Vagary.cpp
 	game/gamesys/DebugGraph.cpp
 	game/gamesys/Class.cpp
 	game/gamesys/Event.cpp

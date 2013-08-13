@@ -1921,10 +1921,10 @@ float idAFEntity_Wheeled_Vehicle::GetSteerAngle( void ) {
 
 /*
 ================
-idAFEntity_Wheeled_Vehicle::UpdatelightsPosition
+idAFEntity_Wheeled_Vehicle::UpdatelightPositions
 ================
 */
-void idAFEntity_Wheeled_Vehicle::UpdatelightsPosition( void ) {
+void idAFEntity_Wheeled_Vehicle::UpdatelightPositions( void ) {
 	// the flash has an explicit joint for locating it
 	GetGlobalJointTransform( headlightsJoint, l_headlights.origin, l_headlights.axis );
     GetGlobalJointTransform( taillightsJoint, l_taillights.origin, l_taillights.axis );
@@ -1969,7 +1969,7 @@ void idAFEntity_Wheeled_Vehicle::ToggleHeadlights( void ) {
         // LIGHTS ON
         StartSound( "snd_switch_on", SND_CHANNEL_ANY, 0, false, NULL );
 
-        UpdatelightsPosition();
+        UpdatelightPositions();
 
         l_headlights.shaderParms[ SHADERPARM_TIMEOFFSET ] = -MS2SEC( gameLocal.time );
         l_headlights.shaderParms[ SHADERPARM_DIVERSITY ] = renderEntity.shaderParms[ SHADERPARM_DIVERSITY ];
@@ -2150,11 +2150,11 @@ void idAFEntity_VehicleSixWheels::Think( void ) {
 			velocity = veh_velocity;
             steerAngle = GetSteerAngle();
         }
-
+        //setup backwards velocity and sound
 	    if ( ( player ) && ( engine >= 0 ) && ( player->usercmd.forwardmove < 0 ) ) {
-            // backwards
+            // backwards velocity
 		    velocity = -velocity;
-            if ( backwards == false ) {
+            if ( !backwards ) {
                 //since this sound loops I use this in order to start it only once
                 StartSound( "snd_alarm", SND_CHANNEL_DEMONIC, 0, false, NULL );
                 backwards = true;
@@ -2164,52 +2164,60 @@ void idAFEntity_VehicleSixWheels::Think( void ) {
             backwards = false;
         }
 
+        // setup the handbrake
         if ( ( player ) && ( player->usercmd.upmove > 0 ) ) {
             //stop the car because we're handbreaking, even if the engine is turned off
             if ( handbrake == 1.0f ) {
                 StartSound( "snd_handbrake", SND_CHANNEL_VOICE, 0, false, NULL );
-                if ( ( engine == 1 ) && ( skid == false ) ) {
-                //FIXME replace the "engine == 1" with some checks on the direction of the car and the torque
-                    //since this sound loops I use this in order to start it only once
-                    StartSound( "snd_skid", SND_CHANNEL_BODY2, 0, false, NULL );
-                    skid = true;
-                }
-                handbrake = 0.0f; // handbrake overrides the force of the car dividing it by zero
-                // TAILLIGHTS ON
-                // first the checks if the light could actually be there
-                if ( taillightsJoint == INVALID_JOINT ) {
-		            return;
-	            }
-        
-                if ( !l_taillights.lightRadius[0] ) {
-		            return;
-	            }
-                // the actual light goes ON
-
-                UpdatelightsPosition();
-
-                l_taillights.shaderParms[ SHADERPARM_TIMEOFFSET ] = -MS2SEC( gameLocal.time );
-                l_taillights.shaderParms[ SHADERPARM_DIVERSITY ] = renderEntity.shaderParms[ SHADERPARM_DIVERSITY ];
-
-
-                //taillightsEnd = gameLocal.time + taillightsTime;
-
-                if ( taillightsHandle != -1 ) {
-		            gameRenderWorld->UpdateLightDef( taillightsHandle, &l_taillights );
-                } else {
-		            taillightsHandle = gameRenderWorld->AddLightDef( &l_taillights );
-                }  
-            }            
+                handbrake = 0.0f; // handbrake overrides the force of the car dividing it by
+            }
         } else {
             handbrake = 1.0f;
-            StopSound(SND_CHANNEL_BODY2, NULL); //stop the skid sound
-            skid = false;
-            // TAILLIGHTS
+        }
+        
+        // play the skid sound
+        if ( ( !af.GetPhysics()->IsAtRest() && ( handbrake == 0.0f ) ) || ( ( handbrake == 0.0f ) && ( ( forwardTorque != 0.0f ) || ( backwardTorque != 0.0f ) ) ) ) {
+        // FIXME add skid sound when we are speddy and we steer.
+            if ( !skid ) {
+                //since this sound loops I use this in order to start it only once
+                StartSound( "snd_skid", SND_CHANNEL_BODY2, 0, false, NULL );
+                skid = true;
+            }
+        } else {        
+            if ( skid ) {
+                StopSound(SND_CHANNEL_BODY2, NULL); 
+                skid = false;
+            }
+        }
+
+        // TAILLIGHTS
+        if ( ( handbrake == 0.0f ) && ( engine >= 0 ) ) {
+            // TAILLIGHTS ON
+            // first the check if the light could actually be there
+            if ( taillightsJoint == INVALID_JOINT ) {
+		        return;
+	        }
+            if ( !l_taillights.lightRadius[0] ) {
+		        return;
+            }
+            // the actual light lights-on
+
+            //UpdatelightPositions();
+
+            l_taillights.shaderParms[ SHADERPARM_TIMEOFFSET ] = -MS2SEC( gameLocal.time );
+            l_taillights.shaderParms[ SHADERPARM_DIVERSITY ] = renderEntity.shaderParms[ SHADERPARM_DIVERSITY ];
+
             if ( taillightsHandle != -1 ) {
-                // the actual light goes OFF
+		        gameRenderWorld->UpdateLightDef( taillightsHandle, &l_taillights );
+            } else {
+		        taillightsHandle = gameRenderWorld->AddLightDef( &l_taillights );
+            } 
+        } else {
+            // TAILLIGHTS OFF
+            if ( taillightsHandle != -1 ) {
+                // the actual light lights-off
 		        gameRenderWorld->FreeLightDef( taillightsHandle );
                 taillightsHandle = -1;
-                //taillightsEnd = 0;
             }
         }
 
@@ -2249,8 +2257,7 @@ void idAFEntity_VehicleSixWheels::Think( void ) {
                         }
                     }
                 }
-             } else if ( player->usercmd.forwardmove == 0 ) {                    
-                StopSound(SND_CHANNEL_BODY2, NULL); //stop the skid sound
+             } else if ( player->usercmd.forwardmove == 0 ) {
                 if ( ( engine == 1 ) && ( torque == 0.0f ) ) { 
                     // unless we stop giving in more torque, don't play the idle sound
                     StopSound(SND_CHANNEL_BODY, NULL); // stop the gas sound
@@ -2296,13 +2303,13 @@ void idAFEntity_VehicleSixWheels::Think( void ) {
 
         //add the direction the player is facing to the "force" of the car
         if ( ( player ) && ( engine >= 0 ) ) {            
-            directionalForce = idMath::Fabs( player->usercmd.forwardmove * veh_force );
+            directionalForce = ( idMath::Fabs( player->usercmd.forwardmove * veh_force ) ) * torque;
         }
 
         // if we exit the car we no longer keep pressing the acelerator, 
         // the car might still move due the action exercised by torque though.
         // Handbrake is there for the case where the player is still in the car.
-        force = directionalForce * torque * handbrake;
+        force = ( directionalForce * torque ) * handbrake;
 
         /*
         if ( af.GetPhysics()->GetLinearVelocity() < 0.0f ) {
@@ -2361,10 +2368,18 @@ void idAFEntity_VehicleSixWheels::Think( void ) {
 		// rotate the wheels visually
 		for ( i = 0; i < 6; i++ ) {
 		    if ( force == 0.0f ) {
-		        velocity = wheels[i]->GetLinearVelocity() * wheels[i]->GetWorldAxis()[0];
+                if ( (i == 0) || ( i == 2) || ( i == 4 ) ) {
+		            velocity = wheels[i]->GetLinearVelocity() * -1.0f  * wheels[i]->GetWorldAxis()[0];
+                } else {
+                    velocity = wheels[i]->GetLinearVelocity() * wheels[i]->GetWorldAxis()[0];
+                }
 			}
-            if ( handbrake == 1.0f ) {  
-	            wheelAngles[i] += velocity * MS2SEC( gameLocal.msec ) / wheelRadius;
+            if ( handbrake == 1.0f ) {
+                if ( (i == 0) || ( i == 2) || ( i == 4 ) ) {
+                    wheelAngles[i] += velocity * -0.45f * MS2SEC( gameLocal.msec ) / wheelRadius;
+                } else {
+	                wheelAngles[i] += velocity * 0.45f * MS2SEC( gameLocal.msec ) / wheelRadius;
+                }
             }
             /*
             else {
@@ -2404,12 +2419,11 @@ void idAFEntity_VehicleSixWheels::Think( void ) {
 		}
 	}
     */
+    //update all light positions
+    UpdatelightPositions();
 
-	// update the muzzle flash light, so it moves with the gun
-	if ( headlightsHandle != -1 ) {
-	    UpdatelightsPosition();
-        gameRenderWorld->UpdateLightDef( headlightsHandle, &l_headlights );
-		
+	if ( headlightsHandle != -1 ) {	    
+        gameRenderWorld->UpdateLightDef( headlightsHandle, &l_headlights );		
         /*
 		// wake up monsters with the flashlight
 		if ( !gameLocal.isMultiplayer && lightOn && !owner->fl.notarget ) {
@@ -2418,7 +2432,6 @@ void idAFEntity_VehicleSixWheels::Think( void ) {
         */
 	}
     if ( taillightsHandle != -1 ) {
-	    UpdatelightsPosition();
         gameRenderWorld->UpdateLightDef( taillightsHandle, &l_taillights );
 	}
     
