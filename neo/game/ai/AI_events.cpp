@@ -83,7 +83,7 @@ const idEventDef AI_MoveToEnemyHeight( "moveToEnemyHeight" );
 const idEventDef AI_MoveOutOfRange( "moveOutOfRange", "ef" );
 const idEventDef AI_MoveToAttackPosition( "moveToAttackPosition", "es" );
 const idEventDef AI_Wander( "wander" );
-const idEventDef AI_MoveToEntity( "moveAImodToEntity", "e" );
+const idEventDef AI_MoveToEntity( "moveToEntity", "e" );
 const idEventDef AI_MoveToPosition( "moveToPosition", "v" );
 const idEventDef AI_SlideTo( "slideTo", "vf" );
 const idEventDef AI_FacingIdeal( "facingIdeal", NULL, 'd' );
