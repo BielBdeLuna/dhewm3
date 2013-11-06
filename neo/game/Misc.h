@@ -765,4 +765,26 @@ private:
 	idList<idVec3>		lastTargetPos;
 };
 
+/*
+===============================================================================
+
+blCompass
+
+===============================================================================
+*/
+class blCompass : public idEntity {
+public:
+	CLASS_PROTOTYPE( blCompass );
+
+	blCompass();
+	~blCompass();
+
+	void				Spawn( void );
+	void				Event_PostSpawn();
+	void				Event_Activate( idEntity *activator );
+
+private:
+    idAngles            angles;
+    float               northOrientation;
+};
 #endif /* !__GAME_MISC_H__ */

@@ -3156,3 +3156,69 @@ void idPhantomObjects::Think( void ) {
 		BecomeInactive( TH_THINK );
 	}
 }
+
+/*
+===============================================================================
+
+blCompass
+
+===============================================================================
+*/
+
+CLASS_DECLARATION( idEntity, blCompass )
+	EVENT( EV_PostSpawn,			blCompass::Event_PostSpawn )
+	EVENT( EV_Activate,				blCompass::Event_Activate )
+END_CLASS
+
+/*
+===============
+blCompass::blCompass
+===============
+*/
+blCompass::blCompass( void ) {
+    angles.Zero();
+    northOrientation = 0.0f;
+
+}
+
+/*
+===============
+blCompass::~blCompass
+===============
+*/
+blCompass::~blCompass( void ) {
+
+}
+
+/*
+===============
+blCompass::Spawn
+===============
+*/
+void blCompass::Spawn( void ) {
+
+    angles = GetPhysics()->GetAxis().ToAngles();
+    northOrientation = angles[1]; // x = 0, --> z = 1 <--, y = 2 (don't ask me why!)    
+
+	if ( !spawnArgs.GetBool( "triggered" ) ) {
+		PostEventMS( &EV_PostSpawn, 1 );
+	}
+}
+
+/*
+================
+blCompass::Event_PostSpawn
+================
+*/
+void blCompass::Event_PostSpawn() {
+    gameLocal.SetNorthOrientation ( northOrientation );
+}
+
+/*
+================
+blCompass::Event_Activate
+================
+*/
+void blCompass::Event_Activate( idEntity *activator ) {
+    gameLocal.SetNorthOrientation ( northOrientation );
+}

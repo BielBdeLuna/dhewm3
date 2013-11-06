@@ -463,6 +463,7 @@ public:
 	void					ToggleScoreboard( void );
 	void					RouteGuiMouse( idUserInterface *gui );
 	void					UpdateHud( void );
+    void                    UpdateCompass( void );
 	const idDeclPDA *		GetPDA( void ) const;
 	const idDeclVideo *		GetVideo( int index );
 	void					SetInfluenceFov( float fov );

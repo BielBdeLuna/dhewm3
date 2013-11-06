@@ -294,6 +294,14 @@ public:
 	idEntityPtr<idEntity>	lastGUIEnt;				// last entity with a GUI, used by Cmd_NextGUI_f
 	int						lastGUI;				// last GUI on the lastGUIEnt
 
+    idEntityPtr<idEntity>	compassEnt;
+	bool					compassActive;
+    idAngles	            compassNorth;
+
+	float                   northOrientation;
+    void                    SetNorthOrientation( float orientation );
+    float                   GetNorthOrientation();
+
 	// ---------------------- Public idGame Interface -------------------
 
 							idGameLocal();

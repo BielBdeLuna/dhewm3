@@ -252,6 +252,8 @@ void idGameLocal::Clear( void ) {
 	savedEventQueue.Init();
 
 	memset( lagometer, 0, sizeof( lagometer ) );
+
+    northOrientation    = 0.0f;
 }
 
 /*
@@ -535,6 +537,8 @@ void idGameLocal::SaveGame( idFile *f ) {
 	savegame.WriteInt( realClientTime );
 	savegame.WriteBool( isNewFrame );
 	savegame.WriteFloat( clientSmoothing );
+
+    savegame.WriteFloat( northOrientation );
 
 	savegame.WriteBool( mapCycleLoaded );
 	savegame.WriteInt( spawnCount );
@@ -905,6 +909,8 @@ void idGameLocal::LoadMap( const char *mapName, int randseed ) {
 	framenum		= 0;
 	sessionCommand = "";
 	nextGibTime		= 0;
+
+    northOrientation    = 0.0f;
 
 	vacuumAreaNum = -1;		// if an info_vacuum is spawned, it will set this
 
@@ -1338,6 +1344,8 @@ bool idGameLocal::InitFromSaveGame( const char *mapName, idRenderWorld *renderWo
 	savegame.ReadInt( framenum );
 	savegame.ReadInt( previousTime );
 	savegame.ReadInt( time );
+    
+	savegame.ReadFloat( northOrientation );
 
 	savegame.ReadInt( vacuumAreaNum );
 
@@ -4361,3 +4369,26 @@ idGameLocal::GetMapLoadingGUI
 ===============
 */
 void idGameLocal::GetMapLoadingGUI( char gui[ MAX_STRING_CHARS ] ) { }
+
+//COMPASS
+
+/*
+=================
+idGameLocal::SetNorthOrientation
+=================
+*/
+void idGameLocal::SetNorthOrientation( float orientation ) {
+    northOrientation = orientation;
+    //gameLocal.Printf( "North has been oriented to: '%f'\n", orientation);
+}
+
+/*
+=================
+idGameLocal::GetNorthOrientation
+=================
+*/
+float idGameLocal::GetNorthOrientation() {
+    return northOrientation;
+}
+
+

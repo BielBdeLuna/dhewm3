@@ -6394,6 +6394,8 @@ void idPlayer::Think( void ) {
 		}
 		gameLocal.Printf( "%d: enemies\n", num );
 	}
+
+    UpdateCompass();    
 }
 
 /*
@@ -7472,6 +7474,25 @@ void idPlayer::SetLastHitTime( int time ) {
 			MPAimFadeTime = gameLocal.realClientTime;
 		}
 	}
+}
+
+/*
+=============
+idPlayer::updateCompass
+=============
+*/
+
+void idPlayer::UpdateCompass() {
+
+    float northOffset;
+    northOffset = gameLocal.GetNorthOrientation() - viewAngles.yaw;
+
+    //gameLocal.Printf( "northOffset is: '%f'\n", northOffset);
+
+    if ( hud ) {
+        hud->SetStateFloat( "northOffset", northOffset );
+        hud->HandleNamedEvent( "setCompassOffset" );
+    }
 }
 
 /*
