@@ -31,6 +31,13 @@ If you have questions concerning this license or the applicable additional terms
 
 #include "physics/Physics_Base.h"
 
+typedef enum {					// MOD_WATERPHYSICS
+	WATERLEVEL_NONE,			// MOD_WATERPHYSICS
+	WATERLEVEL_FEET,			// MOD_WATERPHYSICS
+	WATERLEVEL_WAIST,			// MOD_WATERPHYSICS
+	WATERLEVEL_HEAD				// MOD_WATERPHYSICS
+} waterLevel_t;					// MOD_WATERPHYSICS
+
 /*
 ===================================================================================
 
@@ -60,6 +67,12 @@ public:
 	idEntity *				GetGroundEntity( void ) const;
 							// align the clip model with the gravity direction
 	void					SetClipModelAxis( void );
+    
+    virtual waterLevel_t	GetWaterLevel( void ) const; 	// MOD_WATERPHYSICS
+	virtual int				GetWaterType( void ) const; 	// MOD_WATERPHYSICS
+
+	// greebo: returns the time we (last) submersed into water (above HEAD)
+	int						GetSubmerseTime() const;
 
 public:	// common physics interface
 	void					SetClipModel( idClipModel *model, float density, int id = 0, bool freeOld = true );
@@ -96,6 +109,16 @@ public:	// common physics interface
 	bool					EvaluateContacts( void );
 
 protected:
+    virtual void		SetWaterLevel( bool updateWaterLevelChanged );		// MOD_WATERPHYSICS
+	waterLevel_t		waterLevel;					// MOD_WATERPHYSICS
+	waterLevel_t		previousWaterLevel;			// greebo: The water level of the previous frame
+	int					waterType;					// MOD_WATERPHYSICS
+	int					submerseFrame;				// greebo: The frame in which we submersed (above WATERLEVEL_HEAD)
+	int					submerseTime;				// greebo: The time we submersed (above WATERLEVEL_HEAD)
+
+	// greebo: This is TRUE if the water level has changed since the last physics evaluation (frame)
+	bool				waterLevelChanged;
+
 	idClipModel *			clipModel;			// clip model used for collision detection
 	idMat3					clipModelAxis;		// axis of clip model aligned with gravity direction
 

@@ -30,6 +30,7 @@ If you have questions concerning this license or the applicable additional terms
 #define __PHYSICS_BASE_H__
 
 #include "physics/Physics.h"
+#include "physics/Physics_Liquid.h"
 #include "Game_local.h"
 
 /*
@@ -56,6 +57,8 @@ public:
 public:	// common physics interface
 
 	void					SetSelf( idEntity *e );
+
+    idEntity				*GetSelf() { return self; } // MOD_WATERPHYSICS
 
 	void					SetClipModel( idClipModel *model, float density, int id = 0, bool freeOld = true );
 	idClipModel *			GetClipModel( int id = 0 ) const;
@@ -144,6 +147,12 @@ public:	// common physics interface
 	void					WriteToSnapshot( idBitMsgDelta &msg ) const;
 	void					ReadFromSnapshot( const idBitMsgDelta &msg );
 
+    idPhysics_Liquid *		GetWater();												// MOD_WATERPHYSICS
+	float					GetWaterMurkiness() const;								// TDM Tels
+	void					SetWater( idPhysics_Liquid *e, const float murkiness );	// MOD_WATERPHYSICS
+	float					SetWaterLevelf();										// MOD_WATERPHYSICS
+	float					GetWaterLevelf() const;									// MOD_WATERPHYSICS
+
 protected:
 	idEntity *				self;					// entity using this physics object
 	int						clipMask;				// contents the physics object collides with
@@ -151,6 +160,11 @@ protected:
 	idVec3					gravityNormal;			// normalized direction of gravity
 	idList<contactInfo_t>	contacts;				// contacts with other physics objects
 	idList<contactEntity_t>	contactEntities;		// entities touching this physics object
+
+// the water object the object is in, we use this to check density/viscosity
+	idPhysics_Liquid		*water;					// MOD_WATERPHYSICS
+// TDM Tels: The murkiness of this water, 0 => clear as crystal, 1 => opaque
+	float					m_fWaterMurkiness;
 
 protected:
 							// add ground contacts for the clip model

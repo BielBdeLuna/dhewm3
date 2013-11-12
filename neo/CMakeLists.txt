@@ -522,6 +522,7 @@ set(src_game
 	game/IK.cpp
 	game/Light.cpp
 	game/Misc.cpp
+    game/Liquid.cpp
 	game/Mover.cpp
 	game/Moveable.cpp
 	game/MultiplayerGame.cpp
@@ -570,6 +571,7 @@ set(src_game
 	game/physics/Physics_AF.cpp
 	game/physics/Physics_Actor.cpp
 	game/physics/Physics_Base.cpp
+    game/physics/Physics_Liquid.cpp    
 	game/physics/Physics_Monster.cpp
 	game/physics/Physics_Parametric.cpp
 	game/physics/Physics_Player.cpp

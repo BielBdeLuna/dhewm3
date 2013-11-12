@@ -120,6 +120,8 @@ const idEventDef EV_StartFx( "startFx", "s" );
 const idEventDef EV_HasFunction( "hasFunction", "s", 'd' );
 const idEventDef EV_CallFunction( "callFunction", "s" );
 const idEventDef EV_SetNeverDormant( "setNeverDormant", "d" );
+const idEventDef EV_GetMass( "getMass", EventArgs('d', "body", "") , 'f', "Gets mass of a body for an entity" );
+const idEventDef EV_IsInLiquid( "isInLiquid", EventArgs(), 'd', "Returns 1 if the entity is in or touching a liquid." );
 
 ABSTRACT_DECLARATION( idClass, idEntity )
 	EVENT( EV_GetName,				idEntity::Event_GetName )
@@ -185,6 +187,9 @@ ABSTRACT_DECLARATION( idClass, idEntity )
 	EVENT( EV_HasFunction,			idEntity::Event_HasFunction )
 	EVENT( EV_CallFunction,			idEntity::Event_CallFunction )
 	EVENT( EV_SetNeverDormant,		idEntity::Event_SetNeverDormant )
+
+    EVENT( EV_GetMass,              idEntity::Event_GetMass )
+	EVENT( EV_IsInLiquid,           idEntity::Event_IsInLiquid )
 END_CLASS
 
 /*
@@ -4569,6 +4574,40 @@ idEntity::Event_SetNeverDormant
 void idEntity::Event_SetNeverDormant( int enable ) {
 	fl.neverDormant	= ( enable != 0 );
 	dormantStart = 0;
+}
+
+/*
+
+================
+
+idEntity::Event_GetMass		MOD_WATERPHYSICS
+
+================
+
+*/
+
+void idEntity::Event_GetMass( int id ) {
+
+	idThread::ReturnFloat(physics->GetMass(id));
+
+}
+
+
+
+/*
+
+================
+
+idEntity::Event_IsInLiquid	MOD_WATERPHYSICS
+
+================
+
+*/
+
+void idEntity::Event_IsInLiquid( void ) {
+
+	idThread::ReturnInt(physics->GetWater() != NULL);
+
 }
 
 /***********************************************************************

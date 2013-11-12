@@ -42,6 +42,8 @@ idPhysics_Base::idPhysics_Base
 */
 idPhysics_Base::idPhysics_Base( void ) {
 	self = NULL;
+    water = NULL;	// MOD_WATERPHYSICS
+	m_fWaterMurkiness = 0.0f;
 	clipMask = 0;
 	SetGravity( gameLocal.GetGravity() );
 	ClearContacts();
@@ -835,4 +837,102 @@ idPhysics_Base::ReadFromSnapshot
 ================
 */
 void idPhysics_Base::ReadFromSnapshot( const idBitMsgDelta &msg ) {
+}
+
+/*
+================
+idPhysics_Base::SetWater
+================
+*/
+void idPhysics_Base::SetWater( idPhysics_Liquid *e, const float m ) {
+/*
+	if (e != this->water)
+	{
+		if (NULL != e)
+		{
+			gameLocal.Printf("Entered water with murkiness %f.\n", m );
+		}
+		else
+		{
+			gameLocal.Printf("Leaving water.\n");
+		}
+	}
+*/
+	this->water = e;
+	this->m_fWaterMurkiness = m;
+}
+
+/*
+================
+idPhysics_Base::GetWater
+================
+*/
+idPhysics_Liquid *idPhysics_Base::GetWater()
+{
+	return this->water;
+}
+
+/*
+================
+idPhysics_Base::GetWaterMurkiness
+================
+*/
+float idPhysics_Base::GetWaterMurkiness() const
+{
+	return this->m_fWaterMurkiness;
+}
+
+/*
+================
+idPhysics_Base::SetWaterLevelf
+
+	Returns 1.0f if the object is in a liquid, 0.0f otherwise.
+
+	If the object's not in a liquid it double checks to make sure it's really not.
+	Normally we only set this->water when an object collides with a water material but
+	what happens if an object spawns inside a liquid or something?  Nothing, it'll just sit
+	there.  This function sets the water level for an object that's already inside the water.
+
+	This was most noticeable when I had monsters walking into the water and of course, they'd 
+	sink to the bottom.  After I'd kill them they'd die normally and not float.  After adding
+	this function they float after they're killed.
+
+================
+*/
+float idPhysics_Base::SetWaterLevelf() {
+	if( this->water == NULL ) {
+		idEntity *e[2];
+		trace_t result;
+		idBounds bounds = this->GetBounds();
+
+		bounds += this->GetOrigin();
+
+		// trace for a water contact
+		// Tels: TODO This additional trace might be expensive because it is done every frame
+		if( gameLocal.clip.EntitiesTouchingBounds(bounds,MASK_WATER,e,2) ) {
+			if( e[0]->GetPhysics()->IsType(idPhysics_Liquid::Type) ) {
+				SetWater( static_cast<idPhysics_Liquid *>(e[0]->GetPhysics()), e[0]->spawnArgs.GetFloat("murkiness", "0") );
+				return 1.0f;
+			}
+		}
+
+		this->m_fWaterMurkiness = 0.0f;
+		return 0.0f;
+	}
+	else
+		return 1.0f;
+}
+
+/*
+================
+idPhysics_Base::GetWaterLevelf
+
+	The water level for this object, 0.0f if not in the water, 1.0f if in water
+================
+*/
+float idPhysics_Base::GetWaterLevelf() const {
+	if( this->water == NULL )
+		return 0.0f;
+	else
+		return 1.0f;
 }
