@@ -464,6 +464,7 @@ public:
 	void					RouteGuiMouse( idUserInterface *gui );
 	void					UpdateHud( void );
     void                    UpdateCompass( void );
+    void                    drawHUDdamage( float dir );
 	const idDeclPDA *		GetPDA( void ) const;
 	const idDeclVideo *		GetVideo( int index );
 	void					SetInfluenceFov( float fov );

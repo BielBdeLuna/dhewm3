@@ -6045,6 +6045,8 @@ idPlayer::UpdateHud
 */
 void idPlayer::UpdateHud( void ) {
 	idPlayer *aimed;
+    float viewAngleOffset;
+    float northOffset;
 
 	if ( !hud ) {
 		return;
@@ -6113,6 +6115,19 @@ void idPlayer::UpdateHud( void ) {
 	} else {
 		hud->SetStateString( "hudLag", "0" );
 	}
+
+    //compass elements as well as pain elements
+    
+    viewAngleOffset = -viewAngles.yaw;
+    northOffset = gameLocal.GetNorthOrientation() + viewAngleOffset;
+
+    //gameLocal.Printf( "northOffset is: '%f'\n", northOffset);
+    hud->SetStateFloat( "northOffset", northOffset );
+    //hud->HandleNamedEvent( "setCompassOffset" );
+    
+
+    hud->SetStateFloat( "viewOffset", viewAngleOffset );
+    hud->HandleNamedEvent( "updateRotatingElements" );
 }
 
 /*
@@ -6393,9 +6408,7 @@ void idPlayer::Think( void ) {
 			num++;
 		}
 		gameLocal.Printf( "%d: enemies\n", num );
-	}
-
-    UpdateCompass();    
+	}     
 }
 
 /*
@@ -6704,9 +6717,14 @@ void idPlayer::Damage( idEntity *inflictor, idEntity *attacker, const idVec3 &di
 	int			knockback;
 	idVec3		damage_from;
 	idVec3		localDamageVector;
+    idVec3      deltaDir;
 	float		attackerPushScale;
 
-	// damage is only processed on server
+    //draw damage to the HUD
+    viewAxis.ProjectVector(lastDamageDir, deltaDir);
+    drawHUDdamage( deltaDir.ToAngles()[YAW] + 180 );
+
+    // damage is only processed on server
 	if ( gameLocal.isClient ) {
 		return;
 	}
@@ -6714,7 +6732,6 @@ void idPlayer::Damage( idEntity *inflictor, idEntity *attacker, const idVec3 &di
 	if ( !fl.takedamage || noclip || spectating || gameLocal.inCinematic ) {
 		return;
 	}
-
 	if ( !inflictor ) {
 		inflictor = gameLocal.world;
 	}
@@ -7492,6 +7509,22 @@ void idPlayer::UpdateCompass() {
     if ( hud ) {
         hud->SetStateFloat( "northOffset", northOffset );
         hud->HandleNamedEvent( "setCompassOffset" );
+    }
+}
+
+/*
+=============
+idPlayer::drawHUDdamage
+=============
+*/
+
+void idPlayer::drawHUDdamage( float dir ) {
+
+    gameLocal.Printf( "new direction is: '%f'\n", dir);
+
+    if ( hud ) {
+        hud->SetStateFloat( "pain_debug_Offset", dir );
+        hud->HandleNamedEvent( "debug_pain_element" );
     }
 }
 
