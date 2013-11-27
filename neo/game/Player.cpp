@@ -1133,6 +1133,8 @@ idPlayer::idPlayer() {
 	isChatting				= false;
 
 	selfSmooth				= false;
+
+    pain_wheel              = NULL;
 }
 
 /*
@@ -1467,6 +1469,15 @@ void idPlayer::Spawn( void ) {
 			cursor->Activate( true, gameLocal.time );
 		}
 
+        // load pain wheel
+		if ( spawnArgs.GetString( "pain_wheel", "", temp ) ) {
+			pain_wheel = uiManager->FindGui( temp, true, gameLocal.isMultiplayer, gameLocal.isMultiplayer );
+		}
+        
+		if ( pain_wheel ) {
+			pain_wheel->Activate( true, gameLocal.time );
+		}
+
 		objectiveSystem = uiManager->FindGui( "guis/pda.gui", true, false, true );
 		objectiveSystemOpen = false;
 	}
@@ -1785,6 +1796,8 @@ void idPlayer::Save( idSaveGame *savefile ) const {
 	savefile->WriteObject( focusVehicle );
 	savefile->WriteUserInterface( cursor, false );
 
+    savefile->WriteUserInterface( pain_wheel, false );
+
 	savefile->WriteInt( oldMouseX );
 	savefile->WriteInt( oldMouseY );
 
@@ -2025,6 +2038,8 @@ void idPlayer::Restore( idRestoreGame *savefile ) {
 	savefile->ReadInt( focusTime );
 	savefile->ReadObject( reinterpret_cast<idClass *&>( focusVehicle ) );
 	savefile->ReadUserInterface( cursor );
+
+    savefile->ReadUserInterface( pain_wheel );
 
 	savefile->ReadInt( oldMouseX );
 	savefile->ReadInt( oldMouseY );
@@ -2630,6 +2645,9 @@ void idPlayer::DrawHUD( idUserInterface *_hud ) {
 		if ( cursor && weapon.GetEntity()->ShowCrosshair() ) {
 			cursor->Redraw( gameLocal.realClientTime );
 		}
+        if ( pain_wheel ) {
+            pain_wheel->Redraw( gameLocal.realClientTime );
+        }
 	}
 }
 
@@ -6045,7 +6063,6 @@ idPlayer::UpdateHud
 */
 void idPlayer::UpdateHud( void ) {
 	idPlayer *aimed;
-    float viewAngleOffset;
     float northOffset;
 
 	if ( !hud ) {
@@ -6118,16 +6135,30 @@ void idPlayer::UpdateHud( void ) {
 
     //compass elements as well as pain elements
     
-    viewAngleOffset = -viewAngles.yaw;
-    northOffset = gameLocal.GetNorthOrientation() + viewAngleOffset;
+    northOffset = gameLocal.GetNorthOrientation() - viewAngles.yaw;
 
     //gameLocal.Printf( "northOffset is: '%f'\n", northOffset);
     hud->SetStateFloat( "northOffset", northOffset );
-    //hud->HandleNamedEvent( "setCompassOffset" );
+    hud->HandleNamedEvent( "updateRotatingElements" );
     
 
-    hud->SetStateFloat( "viewOffset", viewAngleOffset );
-    hud->HandleNamedEvent( "updateRotatingElements" );
+    
+    
+}
+
+/*
+==============
+idPlayer::UpdatePainWheel
+==============
+*/
+void idPlayer::UpdatePainWheel( void ) {
+
+    if ( !pain_wheel ) {
+        return;
+    }
+
+    pain_wheel->SetStateFloat( "painViewOffset", -viewAngles.yaw );
+    pain_wheel->HandleNamedEvent( "updatePainRotatingElements" );
 }
 
 /*
@@ -6343,6 +6374,8 @@ void idPlayer::Think( void ) {
 	UpdateAir();
 
 	UpdateHud();
+
+    UpdatePainWheel();
 
 	UpdatePowerUps();
 
@@ -6722,7 +6755,7 @@ void idPlayer::Damage( idEntity *inflictor, idEntity *attacker, const idVec3 &di
 
     //draw damage to the HUD
     viewAxis.ProjectVector(lastDamageDir, deltaDir);
-    drawHUDdamage( deltaDir.ToAngles()[YAW] + 180 );
+    updateDirectionalDamage( deltaDir.ToAngles()[YAW] + 180 );
 
     // damage is only processed on server
 	if ( gameLocal.isClient ) {
@@ -7514,17 +7547,17 @@ void idPlayer::UpdateCompass() {
 
 /*
 =============
-idPlayer::drawHUDdamage
+idPlayer::updateDirectionalDamage
 =============
 */
 
-void idPlayer::drawHUDdamage( float dir ) {
+void idPlayer::updateDirectionalDamage( float dir ) {
 
-    gameLocal.Printf( "new direction is: '%f'\n", dir);
+    //gameLocal.Printf( "new direction is: '%f'\n", dir);
 
-    if ( hud ) {
-        hud->SetStateFloat( "pain_debug_Offset", dir );
-        hud->HandleNamedEvent( "debug_pain_element" );
+    if ( pain_wheel ) {
+        pain_wheel->SetStateFloat( "pain_debug_Offset", dir );
+        pain_wheel->HandleNamedEvent( "debug_pain_element" );
     }
 }
 

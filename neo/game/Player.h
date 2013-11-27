@@ -463,8 +463,9 @@ public:
 	void					ToggleScoreboard( void );
 	void					RouteGuiMouse( idUserInterface *gui );
 	void					UpdateHud( void );
+    void                    UpdatePainWheel( void );
     void                    UpdateCompass( void );
-    void                    drawHUDdamage( float dir );
+    void                    updateDirectionalDamage( float dir );
 	const idDeclPDA *		GetPDA( void ) const;
 	const idDeclVideo *		GetVideo( int index );
 	void					SetInfluenceFov( float fov );
@@ -600,6 +601,8 @@ private:
 	int						focusTime;
 	idAFEntity_Vehicle *	focusVehicle;
 	idUserInterface *		cursor;
+
+    idUserInterface *       pain_wheel;
 
 	// full screen guis track mouse movements directly
 	int						oldMouseX;
