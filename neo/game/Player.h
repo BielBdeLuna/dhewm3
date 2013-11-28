@@ -465,7 +465,8 @@ public:
 	void					UpdateHud( void );
     void                    UpdatePainWheel( void );
     void                    UpdateCompass( void );
-    void                    updateDirectionalDamage( float dir );
+    void                    DrawDirectionalPain( float dir );
+    void                    DrawWorldPain( void );
 	const idDeclPDA *		GetPDA( void ) const;
 	const idDeclVideo *		GetVideo( int index );
 	void					SetInfluenceFov( float fov );
@@ -603,7 +604,16 @@ private:
 	idUserInterface *		cursor;
 
     idUserInterface *       pain_wheel;
-
+    int                     pain_direction_0;
+    int                     pain_direction_1;
+    int                     pain_direction_2;
+    int                     pain_direction_3;
+    int                     pain_direction_4;
+    int                     pain_direction_5;
+    int                     pain_direction_6;
+    int                     pain_direction_7;
+    int                     current_pain;
+    
 	// full screen guis track mouse movements directly
 	int						oldMouseX;
 	int						oldMouseY;

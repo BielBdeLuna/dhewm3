@@ -1135,6 +1135,16 @@ idPlayer::idPlayer() {
 	selfSmooth				= false;
 
     pain_wheel              = NULL;
+    pain_direction_0        = 0;
+    pain_direction_1        = 0;
+    pain_direction_2        = 0;
+    pain_direction_3        = 0;
+    pain_direction_4        = 0;
+    pain_direction_5        = 0;
+    pain_direction_6        = 0;
+    pain_direction_7        = 0;
+    current_pain            = 0;
+    
 }
 
 /*
@@ -1797,6 +1807,16 @@ void idPlayer::Save( idSaveGame *savefile ) const {
 	savefile->WriteUserInterface( cursor, false );
 
     savefile->WriteUserInterface( pain_wheel, false );
+    savefile->WriteInt( pain_direction_0 );
+    savefile->WriteInt( pain_direction_1 );
+    savefile->WriteInt( pain_direction_2 );
+    savefile->WriteInt( pain_direction_3 );
+    savefile->WriteInt( pain_direction_4 );
+    savefile->WriteInt( pain_direction_5 );
+    savefile->WriteInt( pain_direction_6 );
+    savefile->WriteInt( pain_direction_7 );
+    savefile->WriteInt( current_pain );
+    
 
 	savefile->WriteInt( oldMouseX );
 	savefile->WriteInt( oldMouseY );
@@ -2040,6 +2060,15 @@ void idPlayer::Restore( idRestoreGame *savefile ) {
 	savefile->ReadUserInterface( cursor );
 
     savefile->ReadUserInterface( pain_wheel );
+    savefile->ReadInt( pain_direction_0 );
+    savefile->ReadInt( pain_direction_1 );
+    savefile->ReadInt( pain_direction_2 );
+    savefile->ReadInt( pain_direction_3 );
+    savefile->ReadInt( pain_direction_4 );
+    savefile->ReadInt( pain_direction_5 );
+    savefile->ReadInt( pain_direction_6 );
+    savefile->ReadInt( pain_direction_7 );
+    savefile->ReadInt( current_pain );
 
 	savefile->ReadInt( oldMouseX );
 	savefile->ReadInt( oldMouseY );
@@ -6156,7 +6185,16 @@ void idPlayer::UpdatePainWheel( void ) {
     if ( !pain_wheel ) {
         return;
     }
-
+    
+    pain_wheel->SetStateFloat( "pain_0_offset", pain_direction_0 - viewAngles.yaw );
+    pain_wheel->SetStateFloat( "pain_1_offset", pain_direction_1 - viewAngles.yaw );
+    pain_wheel->SetStateFloat( "pain_2_offset", pain_direction_2 - viewAngles.yaw );
+    pain_wheel->SetStateFloat( "pain_3_offset", pain_direction_3 - viewAngles.yaw );
+    pain_wheel->SetStateFloat( "pain_4_offset", pain_direction_4 - viewAngles.yaw );
+    pain_wheel->SetStateFloat( "pain_5_offset", pain_direction_5 - viewAngles.yaw );
+    pain_wheel->SetStateFloat( "pain_6_offset", pain_direction_6 - viewAngles.yaw );
+    pain_wheel->SetStateFloat( "pain_7_offset", pain_direction_7 - viewAngles.yaw );
+    
     pain_wheel->SetStateFloat( "painViewOffset", -viewAngles.yaw );
     pain_wheel->HandleNamedEvent( "updatePainRotatingElements" );
 }
@@ -6750,12 +6788,22 @@ void idPlayer::Damage( idEntity *inflictor, idEntity *attacker, const idVec3 &di
 	int			knockback;
 	idVec3		damage_from;
 	idVec3		localDamageVector;
-    idVec3      deltaDir;
+    idVec3      attackerDir;
+    idVec3      viewAxisAttackerDir;
 	float		attackerPushScale;
 
-    //draw damage to the HUD
-    viewAxis.ProjectVector(lastDamageDir, deltaDir);
-    updateDirectionalDamage( deltaDir.ToAngles()[YAW] + 180 );
+    //draw damage to the Pain Wheel
+    if ( !attacker ) {
+        DrawWorldPain();   
+    } else {       
+        
+        if ( attacker->IsType( idAI::Type ) ) {
+            attackerDir = -dir;
+            attackerDir.Normalize();
+            viewAxis.ProjectVector( attackerDir, viewAxisAttackerDir );
+        }
+        DrawDirectionalPain( viewAxisAttackerDir.ToAngles()[YAW] );
+    }
 
     // damage is only processed on server
 	if ( gameLocal.isClient ) {
@@ -7547,17 +7595,60 @@ void idPlayer::UpdateCompass() {
 
 /*
 =============
-idPlayer::updateDirectionalDamage
+idPlayer::DrawDirectionalPain
 =============
 */
 
-void idPlayer::updateDirectionalDamage( float dir ) {
-
-    //gameLocal.Printf( "new direction is: '%f'\n", dir);
+void idPlayer::DrawDirectionalPain( float dir ) {
 
     if ( pain_wheel ) {
-        pain_wheel->SetStateFloat( "pain_debug_Offset", dir );
-        pain_wheel->HandleNamedEvent( "debug_pain_element" );
+
+        dir = dir + viewAngles.yaw; //yeah this is somewhat a hack
+
+        if ( current_pain == 0 ) {
+            pain_direction_0 = dir;
+            pain_wheel->HandleNamedEvent( "draw_pain_0" );
+        } else if ( current_pain == 1 ) {
+            pain_direction_1 = dir;
+            pain_wheel->HandleNamedEvent( "draw_pain_1" );
+        } else if ( current_pain == 2 ) {
+            pain_direction_2 = dir;
+            pain_wheel->HandleNamedEvent( "draw_pain_2" );
+        } else if ( current_pain == 3 ) {
+            pain_direction_3 = dir;
+            pain_wheel->HandleNamedEvent( "draw_pain_3" );
+        } else if ( current_pain == 4 ) {
+            pain_direction_4 = dir;
+            pain_wheel->HandleNamedEvent( "draw_pain_4" );
+        } else if ( current_pain == 5 ) {
+            pain_direction_5 = dir;
+            pain_wheel->HandleNamedEvent( "draw_pain_5" );
+        } else if ( current_pain == 6 ) {
+            pain_direction_6 = dir;
+            pain_wheel->HandleNamedEvent( "draw_pain_6" );
+        } else {
+            pain_direction_7 = dir;
+            pain_wheel->HandleNamedEvent( "draw_pain_7" );
+        }
+
+        if ( current_pain == 7 ) {
+            current_pain = 0;
+        } else {
+            current_pain = current_pain + 1;
+        }   
+    }
+}
+
+/*
+=============
+idPlayer::DrawWorldPain
+=============
+*/
+
+void idPlayer::DrawWorldPain() {
+
+    if ( pain_wheel ) {
+        pain_wheel->HandleNamedEvent( "draw_world_pain" );
     }
 }
 
