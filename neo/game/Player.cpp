@@ -6144,6 +6144,53 @@ void idPlayer::Move( void ) {
 }
 
 /*
+=====================
+idPlayer::PlayFootStepSound ( from Actor, and now implmented in sublcasses in both Player and AI )
+=====================
+*/
+void idPlayer::PlayFootStepSound( void ) {
+	const char *sound = NULL;
+	const idMaterial *material;
+
+	if ( !GetPhysics()->HasGroundContacts() ) {
+		return;
+	}
+    
+    waterLevel_t waterLevel = physicsObj.GetWaterLevel();
+    if ( waterLevel != WATERLEVEL_NONE ) {
+        // If player is walking in liquid, replace the bottom surface sound with water sounds
+	    if ( waterLevel == WATERLEVEL_FEET ) {
+		    /*if ( hasLanded ) {    //TODO needs to be checked if from here we can call this
+			    sound = spawnArgs.GetString( "snd_land_water_feet" );
+		    } else {*/
+			    sound = spawnArgs.GetString( "snd_footstep_water_feet" );
+		    //}
+	    } else if (waterLevel == WATERLEVEL_WAIST) {
+		    sound = spawnArgs.GetString( "snd_footstep_water_waist" );
+	    } else if (waterLevel == WATERLEVEL_HEAD) {
+		    sound = spawnArgs.GetString( "snd_footstep_water_swim" );
+        }
+
+        if ( *sound == '\0' ) {
+		    sound = spawnArgs.GetString( "snd_land_water_feet" ); //TODO needs to be checked
+	    }
+
+    } else {
+	    // start footstep sound based on material type
+	    material = GetPhysics()->GetContact( 0 ).material;
+	    if ( material != NULL ) {
+		    sound = spawnArgs.GetString( va( "snd_footstep_%s", gameLocal.sufaceTypeNames[ material->GetSurfaceType() ] ) );
+	    }
+	    if ( *sound == '\0' ) {
+		    sound = spawnArgs.GetString( "snd_footstep" );
+	    }
+    }
+	if ( *sound != '\0' ) {
+		StartSoundShader( declManager->FindSound( sound ), SND_CHANNEL_BODY, 0, false, NULL );
+	}
+}
+
+/*
 ==============
 idPlayer::UpdateHud
 ==============

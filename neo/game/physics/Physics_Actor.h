@@ -43,6 +43,13 @@ If you have questions concerning this license or the applicable additional terms
 ===================================================================================
 */
 
+typedef enum {
+	WATERLEVEL_NONE,
+	WATERLEVEL_FEET,
+	WATERLEVEL_WAIST,
+	WATERLEVEL_HEADSetPlayerInput
+} waterLevel_t;
+
 class idPhysics_Actor : public idPhysics_Base {
 
 public:
@@ -60,6 +67,10 @@ public:
 	idEntity *				GetGroundEntity( void ) const;
 							// align the clip model with the gravity direction
 	void					SetClipModelAxis( void );
+
+    						// feed back from last physics frame
+	waterLevel_t			GetWaterLevel( void ) const;
+	int						GetWaterType( void ) const;
 
 public:	// common physics interface
 	void					SetClipModel( idClipModel *model, float density, int id = 0, bool freeOld = true );
@@ -94,6 +105,13 @@ public:	// common physics interface
 	void					LinkClip( void );
 
 	bool					EvaluateContacts( void );
+
+//private:
+    // results of last evaluate
+	waterLevel_t			waterLevel;
+	int						waterType;
+
+    void                    SetWaterLevel( void );
 
 protected:
 	idClipModel *			clipModel;			// clip model used for collision detection

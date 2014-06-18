@@ -626,6 +626,7 @@ private:
 	idAngles				smoothedAngles;
 
     idHashTable<WeaponToggle_t>	weaponToggles; // 7318 - weapontoggle
+    void					PlayFootStepSound( void ); // now it is handled from the Player and the AIs
 
 	// mp
 	bool					ready;					// from userInfo

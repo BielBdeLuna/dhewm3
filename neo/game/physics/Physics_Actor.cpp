@@ -282,6 +282,67 @@ void idPhysics_Actor::SetGravity( const idVec3 &newGravity ) {
 }
 
 /*
+=============
+idPhysics_Actor::SetWaterLevel
+=============
+*/
+void idPhysics_Actor::SetWaterLevel( void ) {
+	idVec3		point;
+	idBounds	bounds;
+	int			contents;
+
+	//
+	// get waterlevel, accounting for ducking
+	//
+	waterLevel = WATERLEVEL_NONE;
+	waterType = 0;
+
+	bounds = clipModel->GetBounds();
+
+	// check at feet level
+	point = current.origin - ( bounds[0][2] + 1.0f ) * gravityNormal;
+	contents = gameLocal.clip.Contents( point, NULL, mat3_identity, -1, self );
+	if ( contents & MASK_WATER ) {
+
+		waterType = contents;
+		waterLevel = WATERLEVEL_FEET;
+
+		// check at waist level
+		point = current.origin - ( bounds[1][2] - bounds[0][2] ) * 0.5f * gravityNormal;
+		contents = gameLocal.clip.Contents( point, NULL, mat3_identity, -1, self );
+		if ( contents & MASK_WATER ) {
+
+			waterLevel = WATERLEVEL_WAIST;
+
+			// check at head level
+			point = current.origin - ( bounds[1][2] - 1.0f ) * gravityNormal;
+			contents = gameLocal.clip.Contents( point, NULL, mat3_identity, -1, self );
+			if ( contents & MASK_WATER ) {
+				waterLevel = WATERLEVEL_HEAD;
+			}
+		}
+	}
+}
+
+/*
+================
+idPhysics_Actor::GetWaterLevel
+================
+*/
+waterLevel_t idPhysics_Actor::GetWaterLevel( void ) const {
+	return waterLevel;
+}
+
+/*
+================
+idPhysics_Actor::GetWaterType
+================
+*/
+int idPhysics_Actor::GetWaterType( void ) const {
+	return waterType;
+}
+
+/*
 ================
 idPhysics_Actor::ClipTranslation
 ================

@@ -1250,11 +1250,11 @@ bool idPhysics_Player::CheckWaterJump( void ) {
 	return true;
 }
 
-/*
+/*                  already handled in Physics_Actor
 =============
 idPhysics_Player::SetWaterLevel
 =============
-*/
+
 void idPhysics_Player::SetWaterLevel( void ) {
 	idVec3		point;
 	idBounds	bounds;
@@ -1292,6 +1292,7 @@ void idPhysics_Player::SetWaterLevel( void ) {
 		}
 	}
 }
+*/
 
 /*
 ================
@@ -1378,7 +1379,7 @@ void idPhysics_Player::MovePlayer( int msec ) {
 	}
 
 	// set watertype and waterlevel
-	idPhysics_Player::SetWaterLevel();
+	idPhysics_Actor::SetWaterLevel();
 
 	// check for ground
 	idPhysics_Player::CheckGround();
@@ -1419,7 +1420,7 @@ void idPhysics_Player::MovePlayer( int msec ) {
 	}
 
 	// set watertype, waterlevel and groundentity
-	idPhysics_Player::SetWaterLevel();
+	idPhysics_Actor::SetWaterLevel();
 	idPhysics_Player::CheckGround();
 
 	// move the player velocity back into the world frame
@@ -1427,23 +1428,24 @@ void idPhysics_Player::MovePlayer( int msec ) {
 	current.pushVelocity.Zero();
 }
 
-/*
+/*      already handled in Physics_Actor
 ================
 idPhysics_Player::GetWaterLevel
 ================
-*/
+
 waterLevel_t idPhysics_Player::GetWaterLevel( void ) const {
 	return waterLevel;
 }
 
-/*
+
 ================
 idPhysics_Player::GetWaterType
 ================
-*/
+
 int idPhysics_Player::GetWaterType( void ) const {
 	return waterType;
 }
+*/
 
 /*
 ================
@@ -1589,6 +1591,7 @@ void idPhysics_Player::Save( idSaveGame *savefile ) const {
 
 	savefile->WriteInt( (int)waterLevel );
 	savefile->WriteInt( waterType );
+
 }
 
 /*

@@ -312,6 +312,9 @@ void idPhysics_Monster::Save( idSaveGame *savefile ) const {
 	savefile->WriteBool( useVelocityMove );
 	savefile->WriteBool( noImpact );
 
+    savefile->WriteInt( (int)waterLevel );
+	savefile->WriteInt( waterType );
+
 	savefile->WriteInt( (int)moveResult );
 	savefile->WriteObject( blockingEntity );
 }
@@ -334,6 +337,9 @@ void idPhysics_Monster::Restore( idRestoreGame *savefile ) {
 	savefile->ReadBool( fly );
 	savefile->ReadBool( useVelocityMove );
 	savefile->ReadBool( noImpact );
+
+    savefile->ReadInt( (int &)waterLevel );
+	savefile->ReadInt( waterType );
 
 	savefile->ReadInt( (int &)moveResult );
 	savefile->ReadObject( reinterpret_cast<idClass *&>( blockingEntity ) );
@@ -455,6 +461,8 @@ bool idPhysics_Monster::Evaluate( int timeStepMSec, int endTimeMSec ) {
 
 	moveResult = MM_OK;
 	blockingEntity = NULL;
+    waterLevel = WATERLEVEL_NONE;
+	waterType = 0;
 	oldOrigin = current.origin;
 
 	// if bound to a master
@@ -480,6 +488,9 @@ bool idPhysics_Monster::Evaluate( int timeStepMSec, int endTimeMSec ) {
 	current.velocity -= current.pushVelocity;
 
 	clipModel->Unlink();
+
+    // set watertype and waterlevel
+	idPhysics_Actor::SetWaterLevel();
 
 	// check if on the ground
 	idPhysics_Monster::CheckGround( current );

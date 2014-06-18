@@ -51,12 +51,14 @@ typedef enum {
 	PM_NOCLIP				// flying without collision detection nor gravity
 } pmtype_t;
 
+/*                 already handled in Physics_Actor
 typedef enum {
 	WATERLEVEL_NONE,
 	WATERLEVEL_FEET,
 	WATERLEVEL_WAIST,
 	WATERLEVEL_HEAD
 } waterLevel_t;
+*/
 
 #define	MAXTOUCH					32
 
@@ -90,9 +92,11 @@ public:
 	void					SetPlayerInput( const usercmd_t &cmd, const idAngles &newViewAngles );
 	void					SetKnockBack( const int knockBackTime );
 	void					SetDebugLevel( bool set );
-							// feed back from last physics frame
+    /*	     already handled in Physics_Actor
+    						// feed back from last physics frame
 	waterLevel_t			GetWaterLevel( void ) const;
 	int						GetWaterType( void ) const;
+    */
 	bool					HasJumped( void ) const;
 	bool					HasSteppedUp( void ) const;
 	float					GetStepUp( void ) const;
@@ -164,10 +168,12 @@ private:
 	// ladder movement
 	bool					ladder;
 	idVec3					ladderNormal;
-
+    
+    /*          already handled in Physics_Actor
 	// results of last evaluate
 	waterLevel_t			waterLevel;
 	int						waterType;
+    */
 
 private:
 	float					CmdScale( const usercmd_t &cmd ) const;
@@ -189,7 +195,7 @@ private:
 	void					CheckLadder( void );
 	bool					CheckJump( void );
 	bool					CheckWaterJump( void );
-	void					SetWaterLevel( void );
+	//void					SetWaterLevel( void );      already handled in Physics_Actor
 	void					DropTimers( void );
 	void					MovePlayer( int msec );
 };
