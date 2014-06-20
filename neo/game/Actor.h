@@ -272,15 +272,16 @@ protected:
 							// copies animation from body to head joints
 	void					CopyJointsFromBodyToHead( void );
 
+    virtual void            PlayFootStepSound( void );
+
 private:
 	void					SyncAnimChannels( int channel, int syncToChannel, int blendFrames );
 	void					FinishSetup( void );
 	void					SetupHead( void );
-	void					PlayFootStepSound( void );
+	
 
 	void					Event_EnableEyeFocus( void );
 	void					Event_DisableEyeFocus( void );
-	void					Event_Footstep( void );
 	void					Event_EnableWalkIK( void );
 	void					Event_DisableWalkIK( void );
 	void					Event_EnableLegIK( int num );
@@ -318,6 +319,8 @@ private:
 	void					Event_SetState( const char *name );
 	void					Event_GetState( void );
 	void					Event_GetHead( void );
+public:
+    void					Event_Footstep( void );
 };
 
 #endif /* !__GAME_ACTOR_H__ */

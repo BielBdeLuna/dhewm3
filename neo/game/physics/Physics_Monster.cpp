@@ -491,7 +491,7 @@ bool idPhysics_Monster::Evaluate( int timeStepMSec, int endTimeMSec ) {
 
     // set watertype and waterlevel
 	idPhysics_Actor::SetWaterLevel();
-
+    
 	// check if on the ground
 	idPhysics_Monster::CheckGround( current );
 

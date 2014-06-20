@@ -4694,24 +4694,27 @@ void idAI::TriggerParticles( const char *jointName ) {
 
 /*
 =====================
-idAI::PlayFootStepSound ( from Actor, and now implmented in sublcasses in both Player and AI )
+idAI::PlayFootStepSound ( from idActor, and now implmented in sublcasses in both idPlayer and idAI )
 =====================
 */
 void idAI::PlayFootStepSound( void ) {
 	const char *sound = NULL;
 	const idMaterial *material;
 
+    //gameLocal.Printf( "footseps from the idAI!\n" );
+    
 	if ( !GetPhysics()->HasGroundContacts() ) {
 		return;
 	}
     
-    waterLevel_t waterLevel = physicsObj.GetWaterLevel();
+    //waterLevel_t waterLevel = physicsObj.GetWaterLevel();     <-- this doesn't work
+    waterLevel_t waterLevel = static_cast<idPhysics_Actor *>(GetPhysics())->GetWaterLevel(); // dark mod solution
     if ( waterLevel != WATERLEVEL_NONE ) {
         // If player is walking in liquid, replace the bottom surface sound with water sounds
 	    if ( waterLevel == WATERLEVEL_FEET ) {
-		    /*if ( hasLanded ) {    //TODO needs to be checked if from here we can call this
-			    sound = spawnArgs.GetString( "snd_land_water_feet" );
-		    } else {*/
+		    //if ( hasLanded ) {    //TODO needs to be checked if from here we can call this
+			//    sound = spawnArgs.GetString( "snd_land_water_feet" );
+		    //} else {
 			    sound = spawnArgs.GetString( "snd_footstep_water_feet" );
 		    //}
 	    } else if (waterLevel == WATERLEVEL_WAIST) {
@@ -4721,7 +4724,7 @@ void idAI::PlayFootStepSound( void ) {
         }
 
         if ( *sound == '\0' ) {
-		    sound = spawnArgs.GetString( "snd_land_water_feet" ); //TODO needs to be checked
+		    sound = spawnArgs.GetString( "snd_physics_enter_water" ); //TODO needs to be checked
 	    }
 
     } else {

@@ -664,9 +664,10 @@ protected:
 	void					Event_CanReachEntity( idEntity *ent );
 	void					Event_CanReachEnemy( void );
 	void					Event_GetReachableEntityPosition( idEntity *ent );
+    void                    Event_MonsterFootstep( void );
 
 private:
-    void					PlayFootStepSound( void ); // now it is handled from the Player and the AIs
+    virtual void            PlayFootStepSound(); // now it is handled from the Player and the AIs
 };
 
 class idCombatNode : public idEntity {

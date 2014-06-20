@@ -292,6 +292,9 @@ CLASS_DECLARATION( idActor, idAI )
 	EVENT( AI_CanReachEntity,					idAI::Event_CanReachEntity )
 	EVENT( AI_CanReachEnemy,					idAI::Event_CanReachEnemy )
 	EVENT( AI_GetReachableEntityPosition,		idAI::Event_GetReachableEntityPosition )
+    EVENT( EV_Footstep,					        idActor::Event_Footstep )
+	EVENT( EV_FootstepLeft,				        idActor::Event_Footstep )
+	EVENT( EV_FootstepRight,			        idActor::Event_Footstep )
 END_CLASS
 
 /*

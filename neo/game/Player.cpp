@@ -6145,12 +6145,14 @@ void idPlayer::Move( void ) {
 
 /*
 =====================
-idPlayer::PlayFootStepSound ( from Actor, and now implmented in sublcasses in both Player and AI )
+idPlayer::PlayFootStepSound ( from idActor, and now implmented in sublcasses in both idPlayer and idAI )
 =====================
 */
 void idPlayer::PlayFootStepSound( void ) {
 	const char *sound = NULL;
 	const idMaterial *material;
+
+    //gameLocal.Printf( "footseps from the idPlayer!\n" );
 
 	if ( !GetPhysics()->HasGroundContacts() ) {
 		return;
@@ -6172,7 +6174,7 @@ void idPlayer::PlayFootStepSound( void ) {
         }
 
         if ( *sound == '\0' ) {
-		    sound = spawnArgs.GetString( "snd_land_water_feet" ); //TODO needs to be checked
+		    sound = spawnArgs.GetString( "snd_physics_enter_water" ); //TODO needs to be checked
 	    }
 
     } else {

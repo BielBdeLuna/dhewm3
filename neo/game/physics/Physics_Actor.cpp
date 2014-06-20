@@ -288,6 +288,7 @@ idPhysics_Actor::SetWaterLevel
 */
 void idPhysics_Actor::SetWaterLevel( void ) {
 	idVec3		point;
+    idVec3      origin;
 	idBounds	bounds;
 	int			contents;
 
@@ -298,9 +299,10 @@ void idPhysics_Actor::SetWaterLevel( void ) {
 	waterType = 0;
 
 	bounds = clipModel->GetBounds();
+    origin = clipModel->GetOrigin();
 
 	// check at feet level
-	point = current.origin - ( bounds[0][2] + 1.0f ) * gravityNormal;
+	point = origin - ( bounds[0][2] + 1.0f ) * gravityNormal;
 	contents = gameLocal.clip.Contents( point, NULL, mat3_identity, -1, self );
 	if ( contents & MASK_WATER ) {
 
@@ -308,14 +310,14 @@ void idPhysics_Actor::SetWaterLevel( void ) {
 		waterLevel = WATERLEVEL_FEET;
 
 		// check at waist level
-		point = current.origin - ( bounds[1][2] - bounds[0][2] ) * 0.5f * gravityNormal;
+		point = origin - ( bounds[1][2] - bounds[0][2] ) * 0.5f * gravityNormal;
 		contents = gameLocal.clip.Contents( point, NULL, mat3_identity, -1, self );
 		if ( contents & MASK_WATER ) {
 
 			waterLevel = WATERLEVEL_WAIST;
 
 			// check at head level
-			point = current.origin - ( bounds[1][2] - 1.0f ) * gravityNormal;
+			point = origin - ( bounds[1][2] - 1.0f ) * gravityNormal;
 			contents = gameLocal.clip.Contents( point, NULL, mat3_identity, -1, self );
 			if ( contents & MASK_WATER ) {
 				waterLevel = WATERLEVEL_HEAD;
