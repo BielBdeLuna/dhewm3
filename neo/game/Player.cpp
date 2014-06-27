@@ -1133,6 +1133,9 @@ idPlayer::idPlayer() {
 	isChatting				= false;
 
 	selfSmooth				= false;
+
+    weaponIsHeating         = false;
+    weaponIsOverheating     = false;
 }
 
 /*
@@ -1686,6 +1689,9 @@ void idPlayer::Save( idSaveGame *savefile ) const {
 	savefile->WriteInt( tourneyRank );
 	savefile->WriteInt( tourneyLine );
 
+	savefile->WriteBool( weaponIsHeating );
+    savefile->WriteBool( weaponIsOverheating );
+
 	teleportEntity.Save( savefile );
 	savefile->WriteInt( teleportKiller );
 
@@ -1913,6 +1919,9 @@ void idPlayer::Restore( idRestoreGame *savefile ) {
 	savefile->ReadInt( latchedTeam );
 	savefile->ReadInt( tourneyRank );
 	savefile->ReadInt( tourneyLine );
+
+	savefile->ReadBool( weaponIsHeating );
+    savefile->ReadBool( weaponIsOverheating );
 
 	teleportEntity.Restore( savefile );
 	savefile->ReadInt( teleportKiller );
@@ -2599,6 +2608,9 @@ void idPlayer::UpdateHudWeapon( bool flashWeapon ) {
 	if ( flashWeapon ) {
 		hud->HandleNamedEvent( "weaponChange" );
 	}
+
+    hud->HandleNamedEvent( "HideHeatMeter" );                
+    
 }
 
 /*
@@ -2789,6 +2801,7 @@ void idPlayer::FireWeapon( void ) {
 	if ( !hiddenWeapon && weapon.GetEntity()->IsReady() ) {
 		if ( weapon.GetEntity()->AmmoInClip() || weapon.GetEntity()->AmmoAvailable() ) {
 			AI_ATTACK_HELD = true;
+            weapon.GetEntity()->HeatItUp();
 			weapon.GetEntity()->BeginAttack();
 			if ( ( weapon_soulcube >= 0 ) && ( currentWeapon == weapon_soulcube ) ) {
 				if ( hud ) {
@@ -6113,6 +6126,43 @@ void idPlayer::UpdateHud( void ) {
 	} else {
 		hud->SetStateString( "hudLag", "0" );
 	}
+
+    float weaponHeat = weapon.GetEntity()->GetHeat();
+
+    if ( weapon.GetEntity()->CanBeOverheated ) {
+        hud->SetStateBool( "weaponOverheated", weapon.GetEntity()->IsOverheating() );
+        if ( weaponHeat > 0.0f ) {
+            hud->SetStateFloat( "heatSpan", weaponHeat );
+    
+            if ( !weaponIsHeating ) {
+                weaponIsHeating = true;
+                hud->HandleNamedEvent( "ShowHeatMeter" );
+            }       
+        }
+
+        if ( weaponHeat <= 0.0f ) {
+                
+            if ( weaponIsHeating ) {
+                if ( gameLocal.time >= ( weapon.GetEntity()->GetCooledOffTime() + 50000 ) ) {
+                    weaponIsHeating = false;
+                    hud->HandleNamedEvent( "HideHeatMeter" );
+                }              
+            }
+        }
+
+        if ( weapon.GetEntity()->IsOverheating() ) {
+            if ( !weaponIsOverheating ) {
+                weaponIsOverheating = true;
+                hud->HandleNamedEvent( "ShowOverheatWarning" );
+            }
+        } else {
+            if ( weaponIsOverheating ) {
+                weaponIsOverheating = false;
+                hud->HandleNamedEvent( "HideOverheatWarning" );
+            }
+
+        }        
+    }
 }
 
 /*

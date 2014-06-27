@@ -48,7 +48,7 @@ typedef enum {
 	WP_RELOAD,
 	WP_HOLSTERED,
 	WP_RISING,
-	WP_LOWERING
+	WP_LOWERING,
 } weaponStatus_t;
 
 typedef int ammo_t;
@@ -158,6 +158,12 @@ public:
 
 	virtual void			ClientPredictionThink( void );
 
+    void                    HeatItUp( void );           // for every shot we add heat and check the status
+    float                   GetHeat( void );            // normalized heat value
+    bool                    IsOverheating( void );      // is overheating at the moment or not
+    bool                    CanBeOverheated;            // whether the gun can heat up or not
+    int                     GetCooledOffTime( void );    // get the time at wich it will stop overheating
+
 private:
 	// script control
 	idScriptBool			WEAPON_ATTACK;
@@ -167,6 +173,7 @@ private:
 	idScriptBool			WEAPON_NETFIRING;
 	idScriptBool			WEAPON_RAISEWEAPON;
 	idScriptBool			WEAPON_LOWERWEAPON;
+    idScriptBool            WEAPON_OVERHEATED;
 	weaponStatus_t			status;
 	idThread *				thread;
 	idStr					state;
@@ -275,16 +282,29 @@ private:
 
 	// sound
 	const idSoundShader *	sndHum;
+    const idSoundShader *   sndOverheat;
 
 	// new style muzzle smokes
 	const idDeclParticle *	weaponSmoke;			// null if it doesn't smoke
 	int						weaponSmokeStartTime;	// set to gameLocal.time every weapon fire
-	bool					continuousSmoke;		// if smoke is continuous ( chainsaw )
+    bool					continuousSmoke;		// if smoke is continuous ( chainsaw )
 	const idDeclParticle *  strikeSmoke;			// striking something in melee
 	int						strikeSmokeStartTime;	// timing
 	idVec3					strikePos;				// position of last melee strike
 	idMat3					strikeAxis;				// axis of last melee strike
 	int						nextStrikeFx;			// used for sound and decal ( may use for strike smoke too )
+
+    // over-heat steam
+    const idDeclParticle *  overheatSmoke;          // the particles to display when overheating
+    int						overheatSmokeStartTime;	// set to gameLocal.time the overheat smoke
+    float                   currentHeat;            // current ammount of heat the weapon suffers
+    float                   cooledOffTime;          // the time at which the weapon cools completely off     
+    float                   coolOffTime;            // time that takes for the weapon to cool off
+    bool                    overheatStatus;         // whether we are already overheating or not
+    void                    CoolItOff( void );      // extract heat at a specific rate
+    
+    float                   fire_rate;              // rate at which the weapon shoots
+    int                     shots_to_overheat;      // minimum shots that overheat the gun while we keep shooting
 
 	// nozzle effects
 	bool					nozzleFx;			// does this use nozzle effects ( parm5 at rest, parm6 firing )

@@ -345,6 +345,7 @@ void idWeapon::Save( idSaveGame *savefile ) const {
 	savefile->WriteBool( hasBloodSplat );
 
 	savefile->WriteSoundShader( sndHum );
+    savefile->WriteSoundShader( sndOverheat );
 
 	savefile->WriteParticle( weaponSmoke );
 	savefile->WriteInt( weaponSmokeStartTime );
@@ -366,6 +367,17 @@ void idWeapon::Save( idSaveGame *savefile ) const {
 	savefile->WriteVec3( nozzleGlowColor );
 	savefile->WriteMaterial( nozzleGlowShader );
 	savefile->WriteFloat( nozzleGlowRadius );
+
+    savefile->WriteParticle( overheatSmoke );
+    savefile->WriteInt( overheatSmokeStartTime );   
+    savefile->WriteFloat( cooledOffTime );
+	savefile->WriteFloat( currentHeat );
+    savefile->WriteFloat( coolOffTime );
+	savefile->WriteBool( CanBeOverheated );
+	savefile->WriteBool( overheatStatus );
+	savefile->WriteInt( shots_to_overheat );
+    savefile->WriteFloat( fire_rate );
+    
 
 	savefile->WriteInt( weaponAngleOffsetAverages );
 	savefile->WriteFloat( weaponAngleOffsetScale );
@@ -401,6 +413,7 @@ void idWeapon::Restore( idRestoreGame *savefile ) {
 	WEAPON_NETFIRING.LinkTo(	scriptObject, "WEAPON_NETFIRING" );
 	WEAPON_RAISEWEAPON.LinkTo(	scriptObject, "WEAPON_RAISEWEAPON" );
 	WEAPON_LOWERWEAPON.LinkTo(	scriptObject, "WEAPON_LOWERWEAPON" );
+    WEAPON_OVERHEATED.LinkTo(   scriptObject, "WEAPON_OVERHEATED" );
 
 	savefile->ReadObject( reinterpret_cast<idClass *&>( owner ) );
 	worldModel.Restore( savefile );
@@ -499,6 +512,7 @@ void idWeapon::Restore( idRestoreGame *savefile ) {
 	savefile->ReadBool( hasBloodSplat );
 
 	savefile->ReadSoundShader( sndHum );
+    savefile->ReadSoundShader( sndOverheat );
 
 	savefile->ReadParticle( weaponSmoke );
 	savefile->ReadInt( weaponSmokeStartTime );
@@ -520,6 +534,17 @@ void idWeapon::Restore( idRestoreGame *savefile ) {
 	savefile->ReadVec3( nozzleGlowColor );
 	savefile->ReadMaterial( nozzleGlowShader );
 	savefile->ReadFloat( nozzleGlowRadius );
+
+    savefile->ReadParticle( overheatSmoke );
+    savefile->ReadInt( overheatSmokeStartTime );    
+    savefile->ReadFloat( cooledOffTime );	
+	savefile->ReadFloat( currentHeat );
+    savefile->ReadFloat( coolOffTime );
+	savefile->ReadBool( CanBeOverheated );
+	savefile->ReadBool( overheatStatus );
+	savefile->ReadInt( shots_to_overheat );
+    savefile->ReadFloat( fire_rate );
+
 
 	savefile->ReadInt( weaponAngleOffsetAverages );
 	savefile->ReadFloat( weaponAngleOffsetScale );
@@ -555,6 +580,7 @@ void idWeapon::Clear( void ) {
 	WEAPON_NETFIRING.Unlink();
 	WEAPON_RAISEWEAPON.Unlink();
 	WEAPON_LOWERWEAPON.Unlink();
+    WEAPON_OVERHEATED.Unlink();
 
 	if ( muzzleFlashHandle != -1 ) {
 		gameRenderWorld->FreeLightDef( muzzleFlashHandle );
@@ -692,6 +718,18 @@ void idWeapon::Clear( void ) {
 	nozzleGlowRadius	= 10;
 	nozzleGlowColor.Zero();
 
+    overheatSmoke       = NULL;
+    overheatSmokeStartTime   = 0;
+    currentHeat         = 0.0f;
+    cooledOffTime       = 0.0f;
+    coolOffTime         = 0.0f;
+    CanBeOverheated     = false;
+    overheatStatus      = false;
+    
+    fire_rate           = 0.0f;
+    shots_to_overheat   = 0;
+    
+
 	weaponAngleOffsetAverages	= 0;
 	weaponAngleOffsetScale		= 0.0f;
 	weaponAngleOffsetMax		= 0.0f;
@@ -704,6 +742,7 @@ void idWeapon::Clear( void ) {
 	FreeModelDef();
 
 	sndHum				= NULL;
+    sndOverheat         = NULL;
 
 	isLinked			= false;
 	projectileEnt		= NULL;
@@ -770,6 +809,7 @@ void idWeapon::GetWeaponDef( const char *objectname, int ammoinclip ) {
 	const char *projectileName;
 	const char *brassDefName;
 	const char *smokeName;
+    const char *overheatName;
 	int			ammoAvail;
 
 	Clear();
@@ -972,6 +1012,26 @@ void idWeapon::GetWeaponDef( const char *objectname, int ammoinclip ) {
 		renderEntity.gui[ 0 ] = uiManager->FindGui( guiName, true, false, true );
 	}
 
+    overheatName = weaponDef->dict.GetString( "overheat_part" );
+	if ( *overheatName != '\0' ) {
+		overheatSmoke = static_cast<const idDeclParticle *>( declManager->FindType( DECL_PARTICLE, overheatName ) );
+	} else {
+		overheatSmoke = NULL;
+	}
+
+    coolOffTime         = weaponDef->dict.GetFloat( "coolOffTime", "0" );
+    fire_rate           = weaponDef->dict.GetFloat( "fire_rate", "0.1" );
+    shots_to_overheat   = weaponDef->dict.GetInt( "shots_to_overheat", "0" );
+
+    if ( shots_to_overheat != 0 ) {
+        CanBeOverheated = true;/*        
+       if ( ( fire_rate * shots_to_overheat ) >= coolOffTime ) {
+            gameLocal.Error( "'coolOffTime' is smaller than 'fire_rate * shots_to_overheat', the weapon can't heat up properly!\n" );
+        }*/       
+    } else {
+        CanBeOverheated = false;
+    }
+
 	zoomFov = weaponDef->dict.GetInt( "zoomFov", "70" );
 	berserk = weaponDef->dict.GetInt( "berserk", "2" );
 
@@ -998,6 +1058,7 @@ void idWeapon::GetWeaponDef( const char *objectname, int ammoinclip ) {
 	WEAPON_NETFIRING.LinkTo(	scriptObject, "WEAPON_NETFIRING" );
 	WEAPON_RAISEWEAPON.LinkTo(	scriptObject, "WEAPON_RAISEWEAPON" );
 	WEAPON_LOWERWEAPON.LinkTo(	scriptObject, "WEAPON_LOWERWEAPON" );
+    WEAPON_OVERHEATED.LinkTo(	scriptObject, "WEAPON_OVERHEATED" );
 
 	spawnArgs = weaponDef->dict;
 
@@ -1006,6 +1067,12 @@ void idWeapon::GetWeaponDef( const char *objectname, int ammoinclip ) {
 		sndHum = declManager->FindSound( shader );
 		StartSoundShader( sndHum, SND_CHANNEL_BODY, 0, false, NULL );
 	}
+
+    shader = spawnArgs.GetString( "snd_overheat" );
+	if ( shader && *shader ) {
+		sndOverheat = declManager->FindSound( shader );
+	}
+
 
 	isLinked = true;
 
@@ -1397,8 +1464,9 @@ void idWeapon::OwnerDied( void ) {
 idWeapon::BeginAttack
 ================
 */
-void idWeapon::BeginAttack( void ) {
-	if ( status != WP_OUTOFAMMO ) {
+void idWeapon::BeginAttack( void ) {    
+	
+    if ( status != WP_OUTOFAMMO ) {
 		lastAttack = gameLocal.time;
 	}
 
@@ -1411,7 +1479,8 @@ void idWeapon::BeginAttack( void ) {
 			StopSound( SND_CHANNEL_BODY, false );
 		}
 	}
-	WEAPON_ATTACK = true;
+    
+    WEAPON_ATTACK = true;
 }
 
 /*
@@ -1902,6 +1971,17 @@ void idWeapon::PresentWeapon( bool showViewModel ) {
 	GetPhysics()->SetAxis( viewWeaponAxis );
 	UpdateVisuals();
 
+    // update the heat of the weapon
+    if ( CanBeOverheated ) {
+        if ( currentHeat > 0.0f ) {
+            CoolItOff();
+        }
+
+        if ( overheatStatus ) {
+            WEAPON_OVERHEATED = overheatStatus;
+        }
+    }
+
 	// update the weapon script
 	UpdateScript();
 
@@ -1939,15 +2019,18 @@ void idWeapon::PresentWeapon( bool showViewModel ) {
 	}
 
 	// muzzle smoke
+
+    // use the barrel joint if available
+    if ( barrelJointView ) {
+        GetGlobalJointTransform( true, barrelJointView, muzzleOrigin, muzzleAxis );
+    } else {
+        // default to going straight out the view
+        muzzleOrigin = playerViewOrigin;
+        muzzleAxis = playerViewAxis;
+    }
+
 	if ( showViewModel && !disabled && weaponSmoke && ( weaponSmokeStartTime != 0 ) ) {
-		// use the barrel joint if available
-		if ( barrelJointView ) {
-			GetGlobalJointTransform( true, barrelJointView, muzzleOrigin, muzzleAxis );
-		} else {
-			// default to going straight out the view
-			muzzleOrigin = playerViewOrigin;
-			muzzleAxis = playerViewAxis;
-		}
+		
 		// spit out a particle
 		if ( !gameLocal.smokeParticles->EmitSmoke( weaponSmoke, weaponSmokeStartTime, gameLocal.random.RandomFloat(), muzzleOrigin, muzzleAxis ) ) {
 			weaponSmokeStartTime = ( continuousSmoke ) ? gameLocal.time : 0;
@@ -1958,6 +2041,14 @@ void idWeapon::PresentWeapon( bool showViewModel ) {
 		// spit out a particle
 		if ( !gameLocal.smokeParticles->EmitSmoke( strikeSmoke, strikeSmokeStartTime, gameLocal.random.RandomFloat(), strikePos, strikeAxis ) ) {
 			strikeSmokeStartTime = 0;
+		}
+	}
+
+    // OverheatParticles
+
+    if ( showViewModel && overheatSmoke && overheatSmokeStartTime != 0 ) {
+		if ( !gameLocal.smokeParticles->EmitSmoke( overheatSmoke, overheatSmokeStartTime, gameLocal.random.RandomFloat(), muzzleOrigin, muzzleAxis ) ) {
+			overheatSmokeStartTime = 0;
 		}
 	}
 
@@ -1979,7 +2070,7 @@ void idWeapon::PresentWeapon( bool showViewModel ) {
 		gameRenderWorld->UpdateLightDef( muzzleFlashHandle, &muzzleFlash );
 		gameRenderWorld->UpdateLightDef( worldMuzzleFlashHandle, &worldMuzzleFlash );
 
-		// wake up monsters with the flashlight
+		// wake up monsters with the flashlightstatus
 		if ( !gameLocal.isMultiplayer && lightOn && !owner->fl.notarget ) {
 			AlertMonsters();
 		}
@@ -2002,6 +2093,88 @@ void idWeapon::PresentWeapon( bool showViewModel ) {
 
 	UpdateSound();
 }
+/*
+================
+idWeapon::CoolItOff
+================
+*/
+void idWeapon::CoolItOff( void ) {
+    if ( CanBeOverheated ) {
+        if ( currentHeat > 0.0f ) {
+            currentHeat -= 1 / ( coolOffTime * USERCMD_HZ );
+        }
+
+        if ( currentHeat < 0.0f ) {
+            currentHeat = 0.0f; // we make sure we stay in safe values that won't display strange beheviour.
+            overheatStatus = false;
+            WEAPON_OVERHEATED = overheatStatus;
+        }
+    }
+}
+
+/*
+================
+idWeapon::HeatItUp
+================
+*/
+void idWeapon::HeatItUp( void ) {
+    
+    if ( CanBeOverheated ) {
+        if ( overheatStatus ) {
+            return;
+        }
+        currentHeat += ( 1 / ( fire_rate * shots_to_overheat * USERCMD_HZ ) ) * USERCMD_HZ * fire_rate;
+
+        if ( currentHeat >= 1.0f ) {
+            currentHeat = 1.0f;
+            if ( !overheatStatus ) {            
+                overheatStatus = true;
+                WEAPON_OVERHEATED = overheatStatus;
+                overheatSmokeStartTime = gameLocal.time;
+                cooledOffTime = overheatSmokeStartTime + coolOffTime;
+                StartSoundShader( sndOverheat, SND_CHANNEL_WEAPON, 0, false, NULL );
+            }
+            
+        }
+    } else {
+        return;
+    }
+}
+
+
+/*
+================
+idWeapon::GetHeat
+================
+*/
+float idWeapon::GetHeat( void ) {
+    float value;
+
+    if ( currentHeat <= 0.0f ) {
+        value = 0.0f;
+    } else if ( currentHeat >= 1.0f ){
+        value = 1.0f;
+    } else {
+        value = currentHeat;
+    }
+    return value;
+}
+/*
+================
+idWeapon::IsOverheating
+================
+*/
+bool idWeapon::IsOverheating( void ) {
+    return overheatStatus;
+}
+/*
+================
+idWeapon::GetCooledOffTime
+================
+*/
+int idWeapon::GetCooledOffTime( void ) {
+    return cooledOffTime;
+}
 
 /*
 ================
@@ -2022,6 +2195,7 @@ void idWeapon::EnterCinematic( void ) {
 		WEAPON_NETFIRING	= false;
 		WEAPON_RAISEWEAPON	= false;
 		WEAPON_LOWERWEAPON	= false;
+        WEAPON_OVERHEATED   = false;
 	}
 
 	disabled = true;

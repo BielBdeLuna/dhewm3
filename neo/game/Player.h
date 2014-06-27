@@ -556,6 +556,9 @@ private:
 	bool					weaponEnabled;
 	bool					showWeaponViewModel;
 
+    bool                    weaponIsHeating;
+    bool                    weaponIsOverheating;
+
 	const idDeclSkin *		skin;
 	const idDeclSkin *		powerUpSkin;
 	idStr					baseSkinName;
