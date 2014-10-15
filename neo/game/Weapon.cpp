@@ -75,6 +75,7 @@ const idEventDef EV_Weapon_AutoReload( "autoReload", NULL, 'f' );
 const idEventDef EV_Weapon_NetReload( "netReload" );
 const idEventDef EV_Weapon_IsInvisible( "isInvisible", NULL, 'f' );
 const idEventDef EV_Weapon_NetEndReload( "netEndReload" );
+const idEventDef EV_Weapon_GetSpread( "getSpread" );
 
 //
 // class def
@@ -116,6 +117,7 @@ CLASS_DECLARATION( idAnimatedEntity, idWeapon )
 	EVENT( EV_Weapon_NetReload,					idWeapon::Event_NetReload )
 	EVENT( EV_Weapon_IsInvisible,				idWeapon::Event_IsInvisible )
 	EVENT( EV_Weapon_NetEndReload,				idWeapon::Event_NetEndReload )
+    EVENT( EV_Weapon_GetSpread,                 idWeapon::Event_GetSpread )
 END_CLASS
 
 /***********************************************************************
@@ -375,8 +377,8 @@ void idWeapon::Save( idSaveGame *savefile ) const {
     savefile->WriteFloat( coolOffTime );
 	savefile->WriteBool( CanBeOverheated );
 	savefile->WriteBool( overheatStatus );
-	savefile->WriteInt( shots_to_overheat );
-    savefile->WriteFloat( fire_rate );
+	savefile->WriteInt( shotsToOverheat );
+    savefile->WriteFloat( fireRate );
     
 
 	savefile->WriteInt( weaponAngleOffsetAverages );
@@ -414,6 +416,7 @@ void idWeapon::Restore( idRestoreGame *savefile ) {
 	WEAPON_RAISEWEAPON.LinkTo(	scriptObject, "WEAPON_RAISEWEAPON" );
 	WEAPON_LOWERWEAPON.LinkTo(	scriptObject, "WEAPON_LOWERWEAPON" );
     WEAPON_OVERHEATED.LinkTo(   scriptObject, "WEAPON_OVERHEATED" );
+    WEAPON_IRONSIGHT.LinkTo(    scriptObject, "WEAPON_IRONSIGHT" );
 
 	savefile->ReadObject( reinterpret_cast<idClass *&>( owner ) );
 	worldModel.Restore( savefile );
@@ -542,8 +545,8 @@ void idWeapon::Restore( idRestoreGame *savefile ) {
     savefile->ReadFloat( coolOffTime );
 	savefile->ReadBool( CanBeOverheated );
 	savefile->ReadBool( overheatStatus );
-	savefile->ReadInt( shots_to_overheat );
-    savefile->ReadFloat( fire_rate );
+	savefile->ReadInt( shotsToOverheat );
+    savefile->ReadFloat( fireRate );
 
 
 	savefile->ReadInt( weaponAngleOffsetAverages );
@@ -581,6 +584,7 @@ void idWeapon::Clear( void ) {
 	WEAPON_RAISEWEAPON.Unlink();
 	WEAPON_LOWERWEAPON.Unlink();
     WEAPON_OVERHEATED.Unlink();
+    WEAPON_IRONSIGHT.Unlink();
 
 	if ( muzzleFlashHandle != -1 ) {
 		gameRenderWorld->FreeLightDef( muzzleFlashHandle );
@@ -717,7 +721,8 @@ void idWeapon::Clear( void ) {
 	nozzleGlowShader	= NULL;
 	nozzleGlowRadius	= 10;
 	nozzleGlowColor.Zero();
-
+    
+    // overheat
     overheatSmoke       = NULL;
     overheatSmokeStartTime   = 0;
     currentHeat         = 0.0f;
@@ -726,8 +731,15 @@ void idWeapon::Clear( void ) {
     CanBeOverheated     = false;
     overheatStatus      = false;
     
-    fire_rate           = 0.0f;
-    shots_to_overheat   = 0;
+    fireRate           = 0.0f;
+    shotsToOverheat   = 0;
+
+    // spread 
+    hasSpread           = false;
+    spread              = 0.0f;
+    spreadBase          = 0.0f;
+    spreadTime          = 0.0f;
+    spreadMax           = 0.0f;
     
 
 	weaponAngleOffsetAverages	= 0;
@@ -1019,18 +1031,27 @@ void idWeapon::GetWeaponDef( const char *objectname, int ammoinclip ) {
 		overheatSmoke = NULL;
 	}
 
-    coolOffTime         = weaponDef->dict.GetFloat( "coolOffTime", "0" );
-    fire_rate           = weaponDef->dict.GetFloat( "fire_rate", "0.1" );
-    shots_to_overheat   = weaponDef->dict.GetInt( "shots_to_overheat", "0" );
+    coolOffTime         = weaponDef->dict.GetFloat( "cool_off_time", "0" );
+    fireRate           = weaponDef->dict.GetFloat( "fire_rate", "0.1" );
+    shotsToOverheat   = weaponDef->dict.GetInt( "shots_to_overheat", "0" );
 
-    if ( shots_to_overheat != 0 ) {
+    if ( shotsToOverheat != 0 ) {
         CanBeOverheated = true;/*        
-       if ( ( fire_rate * shots_to_overheat ) >= coolOffTime ) {
-            gameLocal.Error( "'coolOffTime' is smaller than 'fire_rate * shots_to_overheat', the weapon can't heat up properly!\n" );
+       if ( ( fireRate * shotsToOverheat ) >= coolOffTime ) {
+            gameLocal.Error( "'coolOffTime' is smaller than 'fireRate * shotsToOverheat', the weapon can't heat up properly!\n" );
         }*/       
     } else {
         CanBeOverheated = false;
     }
+
+    spreadBase          = weaponDef->dict.GetFloat( "spread", "0" );
+    if ( spreadBase > 0.0f ) {
+        hasSpread       = true;
+        spreadTime      = weaponDef->dict.GetFloat( "spread_time", "0" );
+    } else {
+        hasSpread       = false;
+    }
+    
 
 	zoomFov = weaponDef->dict.GetInt( "zoomFov", "70" );
 	berserk = weaponDef->dict.GetInt( "berserk", "2" );
@@ -2123,7 +2144,7 @@ void idWeapon::HeatItUp( void ) {
         if ( overheatStatus ) {
             return;
         }
-        currentHeat += ( 1 / ( fire_rate * shots_to_overheat * USERCMD_HZ ) ) * USERCMD_HZ * fire_rate;
+        currentHeat += ( 1 / ( fireRate * shotsToOverheat * USERCMD_HZ ) ) * USERCMD_HZ * fireRate;
 
         if ( currentHeat >= 1.0f ) {
             currentHeat = 1.0f;
@@ -2174,6 +2195,61 @@ idWeapon::GetCooledOffTime
 */
 int idWeapon::GetCooledOffTime( void ) {
     return cooledOffTime;
+}
+
+/*
+==============
+idWeapon::CalcSpreadEffects
+==============
+*/
+float idWeapon::CalcSpreadEffects( void ) {
+    float privateEffects;
+    float publicEffects;
+    float effects;
+
+    privateEffects = /*heatEffect*/ * currentHeat + (/*ironsightEffect*/ * ironsgtSpreadEffector ) * -isIronsight;
+
+    publicEffects = 0 + /*staminEffect*/ + /*angLinVelEffect*/ ; // add the public effects
+
+    effects = privateEffects + publicEffects;
+
+    return effects;
+}
+/*
+==============
+idWeapon::SubSpread
+==============
+*/
+void idWeapon::SubSpread( void ) {
+    if ( hasSpread ) {
+        if ( spread > spreadBase ) {
+            
+            spread -= 1 / ( spreadTime * USERCMD_HZ ) - CalcSpreadEffects();
+        }
+
+        if ( spread < spreadBase ) {
+            spread = spreadBase;
+        }
+    }
+}
+
+/*
+==============
+idWeapon::AddSpread
+==============
+*/
+void idWeapon::AddSpread( void ) {
+    if ( hasSpread ) {
+
+        float something = /*something*/;
+        
+        spread += 1 / ( something * USERCMD_HZ ) + CalcSpreadEffects();
+
+        if ( spread > spreadMax ) {
+            spread = spreadMax;
+        }
+        
+    }
 }
 
 /*

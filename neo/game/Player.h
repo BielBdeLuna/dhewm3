@@ -621,17 +621,8 @@ private:
 	idVec3					smoothedOrigin;
 	idAngles				smoothedAngles;
     
-    float                   spreadTime; // time it takes from max spread to base spread
-    float                   spreadBase; // spread in weapon def
-    float                   spreadMax;  //base spread + ( ( MAX angular and linear velocity effect + MAX overheat effect + MAX stamina effect ) / ( 1 * NORM ironsgtEff ) )
-    float                   angLinVelEff( void );
-    float                   ovrHeatEff( void );
+    float                   angLinVelEff( void );    
     float                   staminEff( void );
-    float                   ironsgtEff( void );
-    float                   spread; // should be in weapon.h 
-    float                   GetSpread( void );
-    void                    SubSpread( void ); // should be public
-    void                    AddSpread( void );
 
 	// mp
 	bool					ready;					// from userInfo

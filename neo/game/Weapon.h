@@ -174,6 +174,7 @@ private:
 	idScriptBool			WEAPON_RAISEWEAPON;
 	idScriptBool			WEAPON_LOWERWEAPON;
     idScriptBool            WEAPON_OVERHEATED;
+    idScriptBool            WEAPON_IRONSIGHT;
 	weaponStatus_t			status;
 	idThread *				thread;
 	idStr					state;
@@ -303,8 +304,22 @@ private:
     bool                    overheatStatus;         // whether we are already overheating or not
     void                    CoolItOff( void );      // extract heat at a specific rate
     
-    float                   fire_rate;              // rate at which the weapon shoots
-    int                     shots_to_overheat;      // minimum shots that overheat the gun while we keep shooting
+    float                   fireRate;              // rate at which the weapon shoots
+    int                     shotsToOverheat;      // minimum shots that overheat the gun while we keep shooting
+
+    bool                    hasSpread;
+    float                   spreadTime; // time it takes from max spread to base spread
+    float                   spreadBase; // spread in weapon def
+    float                   spreadMax;  //base spread + ( ( MAX angular and linear velocity effect + MAX overheat effect + MAX stamina effect ) / ( 1 * NORM ironsgtEff ) )
+    float                   spread;
+    void                    SubSpread( void );
+    void                    AddSpread( void );
+    float                   ovrHeatEff( void );    
+    float                   ironsgtEff( void );
+    float                   CalcSpreadEffects( void );
+    float                   ironsgtTime;
+    float                   ironsgtSpreadEffector;
+    bool                    isIronsight;
 
 	// nozzle effects
 	bool					nozzleFx;			// does this use nozzle effects ( parm5 at rest, parm6 firing )
@@ -373,6 +388,7 @@ private:
 	void					Event_NetReload( void );
 	void					Event_IsInvisible( void );
 	void					Event_NetEndReload( void );
+    void                    Event_GetSpread( void );
 };
 
 ID_INLINE bool idWeapon::IsLinked( void ) {

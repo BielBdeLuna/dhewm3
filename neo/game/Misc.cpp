@@ -1233,7 +1233,7 @@ void idAnimated::Event_Start( void ) {
 			PostEventMS( &EV_AnimDone, len, 1 );
 		}
 	}
-
+idAn
 	// offset the start time of the shader to sync it to the game time
 	renderEntity.shaderParms[ SHADERPARM_TIMEOFFSET ] = -MS2SEC( gameLocal.time );
 
@@ -1246,7 +1246,7 @@ void idAnimated::Event_Start( void ) {
 /*
 ===============
 idAnimated::Event_Footstep
-===============
+===============idAn
 */
 void idAnimated::Event_Footstep( void ) {
 	StartSound( "snd_footstep", SND_CHANNEL_BODY, 0, false, NULL );
