@@ -435,6 +435,8 @@ idEntity::idEntity() {
 	memset( &refSound, 0, sizeof( refSound ) );
 
 	mpGUIState = -1;
+
+	m_bIsMantleable = false;
 }
 
 /*
@@ -570,6 +572,8 @@ void idEntity::Spawn( void ) {
 
 		ConstructScriptObject();
 	}
+
+	m_bIsMantleable = spawnArgs.GetBool( "is_mantleable", "1" );
 }
 
 /*
@@ -652,6 +656,8 @@ void idEntity::Save( idSaveGame *savefile ) const {
 
 	savefile->WriteInt( health );
 
+	savefile->WriteBool( m_bIsMantleable );
+
 	savefile->WriteInt( targets.Num() );
 	for( i = 0; i < targets.Num(); i++ ) {
 		targets[ i ].Save( savefile );
@@ -725,6 +731,8 @@ void idEntity::Restore( idRestoreGame *savefile ) {
 	savefile->ReadObject( reinterpret_cast<idClass *&>( cameraTarget ) );
 
 	savefile->ReadInt( health );
+
+	savefile->ReadBool( m_bIsMantleable );
 
 	targets.Clear();
 	savefile->ReadInt( num );
@@ -2861,6 +2869,25 @@ idEntity::RemoveContactEntity
 */
 void idEntity::RemoveContactEntity( idEntity *ent ) {
 	GetPhysics()->RemoveContactEntity( ent );
+}
+
+/**
+* If this entity (or any entity that it is attached to) has mantling disabled,
+* then this returns false. Otherwise, returns true.
+**/
+bool idEntity::IsMantleable() const
+{
+	// the entity itself
+	if (!m_bIsMantleable)
+	{
+		return false;
+	}
+	// else continue with the bind master (there is only one bind master per team)
+	if (bindMaster && (! bindMaster->m_bIsMantleable))
+	{
+		return false;
+	}
+	return true;
 }
 
 

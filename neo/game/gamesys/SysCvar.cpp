@@ -270,6 +270,19 @@ idCVar pm_thirdPersonDeath(			"pm_thirdPersonDeath",		"0",			CVAR_GAME | CVAR_NE
 idCVar pm_modelView(				"pm_modelView",				"0",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_INTEGER, "draws camera from POV of player model (1 = always, 2 = when dead)", 0, 2, idCmdSystem::ArgCompletion_Integer<0,2> );
 idCVar pm_airTics(					"pm_air",					"1800",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_INTEGER, "how long in milliseconds the player can go without air before he starts taking damage" );
 
+idCVar pm_mantle_reach(				"pm_mantle_reach",			"0.5",			CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT, "Horizontal reach of mantle ability, as fraction of player height.  Default is 0.5" );
+idCVar pm_mantle_height(			"pm_mantle_height",			"0.2",			CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT, "Vertical reach of mantle ability, as fraction of player height.  Default is 0.2" );
+idCVar pm_mantle_minflatness(		"pm_mantle_minflatness",	"0.707",		CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT, "Cannot mantle on top of surfaces whose angle's cosine is smaller than this value. e.g. >1.0 means nothing can be mantled; 1.0 means only perfectly flat floors (0 degrees) can be mantled on top of; ~0.707 means no surfaces steeper than 45 degrees can be mantled on top of; 0.5 means no surfaces steeper than 60 degrees can be mantled on top of; a large negative value (like -10) means all surfaces can be mantled regardless of steepness. Default is 0.707." );
+
+idCVar pm_mantle_jump_hold_trigger(	"pm_mantle_jump_hold_trigger","100",		CVAR_GAME | CVAR_INTEGER , "Default length of time for holding down jump key to start mantling." );
+idCVar pm_mantle_min_velocity_for_damage(	"pm_mantle_min_velocity_for_damage", "15",			CVAR_GAME | CVAR_FLOAT , "Default damage scale for mantling at high velocities." );
+idCVar pm_mantle_damage_per_velocity_over_minimum(	"pm_mantle_damage_per_velocity_over_minimum",		"0.5",			CVAR_GAME | CVAR_FLOAT , "The meters per second of relative velocity beyond which the player takes damage when trying to mantle a target." );
+idCVar pm_mantle_hang_msecs(		"pm_mantle_hang_msecs",		"750",			CVAR_GAME | CVAR_INTEGER , "Milliseconds of time that player hangs if mantle begins with the player's feet of the ground." );
+idCVar pm_mantle_pull_msecs(		"pm_mantle_pull_msecs",		"750",			CVAR_GAME | CVAR_INTEGER , "Milliseconds of time it takes for the player to pull themselves up to shoulder level with the mantle surface." );
+idCVar pm_mantle_shift_hands_msecs(	"pm_mantle_shift_hands_msecs","500",		CVAR_GAME | CVAR_INTEGER , "Milliseconds of time it takes for the player to shift their hands from pulling to pushing." );
+idCVar pm_mantle_push_msecs(		"pm_mantle_push_msecs",		"800",			CVAR_GAME | CVAR_INTEGER , "Milliseconds of time it takes for the player to push themselves up onto the mantle surface." );
+
+
 idCVar g_showPlayerShadow(			"g_showPlayerShadow",		"0",			CVAR_GAME | CVAR_ARCHIVE | CVAR_BOOL, "enables shadow of player model" );
 idCVar g_showHud(					"g_showHud",				"1",			CVAR_GAME | CVAR_ARCHIVE | CVAR_BOOL, "" );
 idCVar g_showProjectilePct(			"g_showProjectilePct",		"0",			CVAR_GAME | CVAR_ARCHIVE | CVAR_BOOL, "enables display of player hit percentage" );

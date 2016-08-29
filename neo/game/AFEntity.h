@@ -112,6 +112,8 @@ public:
 	void					ClearBody( void );
 	idEntity *				GetBody( void ) const;
 
+	bool					IsMantleable( void );
+
 	virtual void			Think( void );
 
 	virtual void			Hide( void );
@@ -130,6 +132,7 @@ public:
 	idClipModel *			GetCombatModel( void ) const;
 	virtual void			LinkCombat( void );
 	virtual void			UnlinkCombat( void );
+
 
 protected:
 	idEntity *				body;

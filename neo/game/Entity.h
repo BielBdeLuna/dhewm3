@@ -361,7 +361,13 @@ public:
 	void					ServerSendEvent( int eventId, const idBitMsg *msg, bool saveEvent, int excludeClient ) const;
 	void					ClientSendEvent( int eventId, const idBitMsg *msg ) const;
 
+	/**
+	* Return true if this entity can be mantled, false otherwise.
+	*/
+	virtual bool			IsMantleable() const;
+
 protected:
+	bool					m_bIsMantleable;
 	renderEntity_t			renderEntity;						// used to present a model to the renderer
 	int						modelDefHandle;						// handle to static renderer model
 	refSound_t				refSound;							// used to present sound to the audio engine

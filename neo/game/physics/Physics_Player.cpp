@@ -29,7 +29,7 @@ If you have questions concerning this license or the applicable additional terms
 #include "sys/platform.h"
 #include "gamesys/SysCvar.h"
 #include "Entity.h"
-
+#include "../Player.h"
 #include "physics/Physics_Player.h"
 
 CLASS_DECLARATION( idPhysics_Actor, idPhysics_Player )
@@ -51,6 +51,15 @@ const float PM_AIRFRICTION		= 0.0f;
 const float PM_WATERFRICTION	= 1.0f;
 const float PM_FLYFRICTION		= 3.0f;
 const float PM_NOCLIPFRICTION	= 12.0f;
+
+/**
+*  Height unit increment for mantle test
+* This value should be >= 1.0
+* A larger value reduces the number of tests during a mantle
+* initiation, but may not find some small mantleable "nooks"
+* in a surface.
+**/
+const float MANTLE_TEST_INCREMENT = 1.0;
 
 const float MIN_WALK_NORMAL		= 0.7f;		// can't walk on very steep slopes
 const float OVERCLIP			= 1.001f;
@@ -989,6 +998,11 @@ void idPhysics_Player::CheckGround( void ) {
 		// do something corrective if stuck in solid
 		idPhysics_Player::CorrectAllSolid( groundTrace, contents );
 	}
+	else if ( m_mantlePhase == fixTheClipping )
+	{
+		// the mantle stage can advance to done if we're not currently clipping
+		m_mantlePhase = notMantling;
+	}
 
 	// if the trace didn't hit anything, we are in free fall
 	if ( groundTrace.fraction == 1.0f ) {
@@ -1130,6 +1144,11 @@ void idPhysics_Player::CheckLadder( void ) {
 
 	// if on the ground moving backwards
 	if ( walking && command.forwardmove <= 0 ) {
+		return;
+	}
+
+	// Don't attach to ropes or ladders in the middle of a mantle
+	if ( IsMantling() ) {
 		return;
 	}
 
@@ -1340,6 +1359,13 @@ void idPhysics_Player::MovePlayer( int msec ) {
 	if ( command.upmove < 10 ) {
 		// not holding jump
 		current.movementFlags &= ~PMF_JUMP_HELD;
+
+		if ( m_mantlePhase == notMantling || m_mantlePhase == fixTheClipping )
+				{
+					// greebo: Jump button is released and no mantle phase is active,
+					// we can allow the next mantling process.
+					m_mantleStartPossible = true;
+				}
 	}
 
 	// if no movement at all
@@ -1392,10 +1418,26 @@ void idPhysics_Player::MovePlayer( int msec ) {
 	// handle timers
 	idPhysics_Player::DropTimers();
 
+	// Mantle Mod: SophisticatdZombie (DH)
+	idPhysics_Player::UpdateMantleTimers();
+
+	// Check if holding down jump
+	if (CheckJumpHeldDown())
+	{
+		idPhysics_Player::PerformMantle();
+	}
+
 	// move
 	if ( current.movementType == PM_DEAD ) {
 		// dead
 		idPhysics_Player::DeadMove();
+	}
+	// Mantle MOD
+	// SophisticatedZombie (DH)
+	// greebo: Do the MantleMove before checking the rope contacts
+	else if ( !(m_mantlePhase == notMantling || m_mantlePhase == fixTheClipping) )
+	{
+		idPhysics_Player::MantleMove();
 	}
 	else if ( ladder ) {
 		// going up or down a ladder
@@ -1520,6 +1562,14 @@ idPhysics_Player::idPhysics_Player( void ) {
 	ladderNormal.Zero();
 	waterLevel = WATERLEVEL_NONE;
 	waterType = 0;
+
+	// Mantle Mod
+	m_mantlePhase = notMantling;
+	m_mantleTime = 0.0;
+	m_p_mantledEntity = NULL;
+	m_mantledEntityID = 0;
+	m_jumpHeldDownTime = 0.0;
+	m_mantleStartPossible = true;
 }
 
 /*
@@ -1589,6 +1639,17 @@ void idPhysics_Player::Save( idSaveGame *savefile ) const {
 
 	savefile->WriteInt( (int)waterLevel );
 	savefile->WriteInt( waterType );
+
+	// Mantle mod
+	savefile->WriteInt(m_mantlePhase);
+	savefile->WriteBool(m_mantleStartPossible);
+	savefile->WriteVec3(m_mantlePullStartPos);
+	savefile->WriteVec3(m_mantlePullEndPos);
+	savefile->WriteVec3(m_mantlePushEndPos);
+	savefile->WriteObject(m_p_mantledEntity);
+	savefile->WriteInt(m_mantledEntityID);
+	savefile->WriteFloat(m_mantleTime);
+	savefile->WriteFloat(m_jumpHeldDownTime);
 }
 
 /*
@@ -1626,6 +1687,21 @@ void idPhysics_Player::Restore( idRestoreGame *savefile ) {
 
 	savefile->ReadInt( (int &)waterLevel );
 	savefile->ReadInt( waterType );
+
+	// Mantle mod
+	int temp;
+	savefile->ReadInt(temp);
+	assert(temp >= 0 && temp < NumMantlePhases); // sanity check
+	m_mantlePhase = static_cast<EMantlePhase>(temp);
+
+	savefile->ReadBool(m_mantleStartPossible);
+	savefile->ReadVec3(m_mantlePullStartPos);
+	savefile->ReadVec3(m_mantlePullEndPos);
+	savefile->ReadVec3(m_mantlePushEndPos);
+	savefile->ReadObject(reinterpret_cast<idClass*&>(m_p_mantledEntity));
+	savefile->ReadInt(m_mantledEntityID);
+	savefile->ReadFloat(m_mantleTime);
+	savefile->ReadFloat(m_jumpHeldDownTime);
 }
 
 /*
@@ -2041,4 +2117,1046 @@ void idPhysics_Player::ReadFromSnapshot( const idBitMsgDelta &msg ) {
 	if ( clipModel ) {
 		clipModel->Link( gameLocal.clip, self, 0, current.origin, clipModel->GetAxis() );
 	}
+}
+
+/*
+================
+idPhysics_Player::PerformMantle
+================
+*/
+void idPhysics_Player::PerformMantle( void ) {
+
+	// Can't start mantle if already mantling or not yet possible (jump button not yet released)
+	if ( !(m_mantlePhase == notMantling || m_mantlePhase == fixTheClipping ) || !m_mantleStartPossible ) {
+		return;
+	}
+
+	/* no imobilitzation system on our end
+	if (static_cast<idPlayer*>(self)->GetImmobilization() & EIM_MANTLE)
+	{
+		return; // greebo: Mantling disabled by immobilization system
+	}
+	*/
+	//p_player->SetInfluenceLevel( INFLUENCE_LEVEL3 );
+	//p_player->LowerWeapon();
+
+	// Clear mantled entity members to indicate nothing is
+	// being mantled
+	m_p_mantledEntity = NULL;
+	m_mantledEntityID = 0;
+
+	// Forward vector is direction player is looking
+	idVec3 forward = viewAngles.ToForward();
+	forward.Normalize();
+
+	// We use gravity a lot here...
+	idVec3 gravityNormal = GetGravityNormal();
+	idVec3 upVector = -gravityNormal;
+
+	// Get maximum reach distances for mantling
+	float maxVerticalReachDistance;
+	float maxHorizontalReachDistance;
+	float maxMantleTraceDistance;
+
+	GetCurrentMantlingReachDistances
+	(
+		maxVerticalReachDistance,
+		maxHorizontalReachDistance,
+		maxMantleTraceDistance
+	);
+
+
+	// Get start position of gaze trace, which is player's eye position
+	idPlayer* p_player = static_cast<idPlayer*>(self);
+
+	if (p_player == NULL)
+	{
+		/* we don't have a logging system on our end
+		DM_LOG(LC_MOVEMENT, LT_ERROR)LOGSTRING("p_player is NULL\r");
+		*/
+		return;
+	}
+	/* we don't have a log system on our end
+	DM_LOG(LC_MOVEMENT, LT_DEBUG)LOGSTRING ("Getting eye position\r");
+	*/
+	idVec3 eyePos = p_player->GetEyePosition();
+
+	/* we're not holding objects on our end
+	// Ishtvan: Do not attempt to mantle if holding an object
+	if( gameLocal.m_Grabber->GetSelected() )
+		return;
+	*/
+
+	// Run mantle trace
+	trace_t trace;
+
+	MantleTargetTrace
+	(
+		maxMantleTraceDistance,
+		eyePos,
+		forward,
+		trace
+	);
+
+	// If the trace found a target, see if it is mantleable
+	if ( trace.fraction < 1.0f )
+	{
+		// mantle target found
+		/*we don't hold a log on our end
+		// Log trace hit point
+		DM_LOG(LC_MOVEMENT, LT_DEBUG)LOGSTRING
+		(
+			"Mantle target trace collision point (%f %f %f)\r",
+			trace.c.point.x,
+			trace.c.point.y,
+			trace.c.point.z
+		);
+		*/
+		// Find mantle end point and make sure mantle is
+		// possible
+		idVec3 mantleEndPoint;
+		if (ComputeMantlePathForTarget ( maxVerticalReachDistance, maxHorizontalReachDistance, eyePos, trace, mantleEndPoint )) {
+			// Mantle target passed mantleability tests
+			/* we don't hold any logs on our end
+			// Log the end point
+			DM_LOG(LC_MOVEMENT, LT_DEBUG)LOGSTRING
+			(
+				"Mantle end position = (%f %f %f)\r",
+				mantleEndPoint.x,
+				mantleEndPoint.y,
+				mantleEndPoint.z
+			);
+			*/
+			// Start with log phase dependent on position relative
+			// to the mantle end point
+			if (mantleEndPoint * gravityNormal < eyePos * gravityNormal)
+			{
+				// Start with pull if on the ground, hang if not
+				if (groundPlane)
+				{
+					StartMantle(mantlingPulling, eyePos, GetOrigin(), mantleEndPoint);
+				}
+				else
+				{
+					StartMantle(mantlingHanging, eyePos, GetOrigin(), mantleEndPoint);
+				}
+			}
+			else
+			{
+				// We are above it, start with push
+				StartMantle(mantlingPushing, eyePos, GetOrigin(), mantleEndPoint);
+			}
+		}
+	}
+}
+
+/*
+================
+idPhysics_Player::GetCurrentMantlingReachDistances
+================
+*/
+void idPhysics_Player::GetCurrentMantlingReachDistances ( float& out_maxVerticalReachDistance,
+		                                                  float& out_maxHorizontalReachDistance,
+														  float& out_maxMantleTraceDistance
+														) {
+	// Determine arm reach in each direction
+	float armReach = pm_normalheight.GetFloat() * pm_mantle_reach.GetFloat();
+	float armVerticalReach = pm_normalheight.GetFloat() * pm_mantle_height.GetFloat();
+
+	// Trace out as far as horizontal arm length from player
+	out_maxMantleTraceDistance = armReach;
+
+	// Determine maximum vertical and horizontal distance components for
+	// a mantleable surface
+	if (current.movementFlags & PMF_DUCKED /*&& !OnRope() && !OnLadder()*/)
+	{
+		out_maxVerticalReachDistance = pm_crouchheight.GetFloat() + armVerticalReach;
+	}
+	/*else if (OnRope() || OnLadder())
+	{
+		// angua: need larger reach when on rope
+		out_maxVerticalReachDistance = pm_normalheight.GetFloat() + armVerticalReach;
+		out_maxHorizontalReachDistance = 2* armReach;
+		out_maxMantleTraceDistance *= 2;
+	}*/
+	else
+	{
+		// This vertical distance is up from the players feet
+		out_maxVerticalReachDistance = pm_normalheight.GetFloat() + armVerticalReach;
+	}
+	out_maxHorizontalReachDistance = armReach;
+}
+
+/*
+================
+idPhysics_Player::MantleTargetTrace
+================
+*/
+void idPhysics_Player::MantleTargetTrace ( float maxMantleTraceDistance,
+										   const idVec3& eyePos,
+										   const idVec3& forwardVec,
+										   trace_t& out_trace
+										 ) {
+	// Calculate end point of gaze trace
+	idVec3 end = eyePos + (maxMantleTraceDistance * forwardVec);
+
+	// Run gaze trace
+	gameLocal.clip.TracePoint( out_trace, eyePos, end, MASK_SOLID, self );
+
+	// If that trace didn't hit anything, try a taller trace forward along the midline
+	// of the player's body for the full player's height out the trace distance.
+	if ( out_trace.fraction >= 1.0f )
+	{
+		idVec3 upVector = -GetGravityNormal();
+
+		// Project forward vector onto the a plane perpendicular to gravity
+		idVec3 forwardPerpGrav = forwardVec;
+		forwardPerpGrav.ProjectOntoPlane(upVector);
+
+		// Create bounds for translation trace model
+		idBounds bounds = clipModel->GetBounds();
+		idBounds savedBounds = bounds;
+
+		bounds[0][1] = (savedBounds[0][1] + savedBounds[1][1]) / 2;
+		bounds[0][1] -= 0.01f;
+		bounds[1][1] = bounds[0][1] + 0.02f;
+		bounds[0][0] = bounds[0][1];
+		bounds[1][0] = bounds[1][1];
+
+		clipModel->LoadModel( pm_usecylinder.GetBool() ? idTraceModel(bounds, 8) : idTraceModel(bounds) );
+		/* we don't sport a log system on our end
+		DM_LOG(LC_MOVEMENT, LT_DEBUG)LOGSTRING("Mantle gaze trace didn't hit anything, so doing forward movement trace for mantle target\r");
+		*/
+		end = current.origin + (maxMantleTraceDistance * forwardPerpGrav);
+		gameLocal.clip.Translation ( out_trace, current.origin, end, clipModel, clipModel->GetAxis(), MASK_SOLID, self );
+
+		//gameRenderWorld->DebugBounds(colorCyan, bounds, current.origin, 2000);
+		//gameRenderWorld->DebugBounds(colorBlue, bounds, current.origin + (maxMantleTraceDistance * forwardPerpGrav), 2000);
+
+		// Restore player clip model to normal
+		clipModel->LoadModel( pm_usecylinder.GetBool() ? idTraceModel(savedBounds, 8) : idTraceModel(savedBounds) );
+	}
+
+	// Get the entity to be mantled
+	if (out_trace.c.entityNum != ENTITYNUM_NONE)
+	{
+		// Track entity which is was the chosen target
+		m_p_mantledEntity = gameLocal.entities[out_trace.c.entityNum];
+
+		if (m_p_mantledEntity->IsMantleable())
+		{
+			m_mantledEntityID = out_trace.c.id;
+			/* no logging on our end
+			DM_LOG(LC_MOVEMENT, LT_DEBUG)LOGSTRING("Mantle target entity is called '%s'\r", m_p_mantledEntity->name.c_str());
+			*/
+		}
+		else
+		{
+			// Oops, this entity isn't mantleable
+			m_p_mantledEntity = NULL;
+			out_trace.fraction = 1.0f; // Pretend we didn't hit anything
+		}
+	}
+}
+/*
+================
+idPhysics_Player::ComputeMantlePathForTarget
+================
+*/
+bool idPhysics_Player::ComputeMantlePathForTarget (	float maxVerticalReachDistance,
+												    float maxHorizontalReachDistance,
+													const idVec3& eyePos,
+													trace_t& in_targetTraceResult,
+													idVec3& out_mantleEndPoint
+												  ) {
+	// Up vector
+	idVec3 upVector = -GetGravityNormal();
+
+	// Mantle start point is origin
+	const idVec3& mantleStartPoint = GetOrigin();
+
+	// Check if trace target has a mantleable surface
+	bool b_canBeMantled = DetermineIfMantleTargetHasMantleableSurface ( maxVerticalReachDistance,
+																		maxHorizontalReachDistance,
+																		in_targetTraceResult,
+																		out_mantleEndPoint
+																	  );
+
+	if (b_canBeMantled) {
+		// Check if path to mantle end point is not blocked
+		b_canBeMantled &= DetermineIfPathToMantleSurfaceIsPossible ( maxVerticalReachDistance,
+																	 maxHorizontalReachDistance,
+																	 eyePos,
+																	 mantleStartPoint,
+																	 out_mantleEndPoint
+																   );
+
+		if (b_canBeMantled)
+		{
+			// Is end point too far away?
+			idVec3 endDistanceVector = out_mantleEndPoint - eyePos;
+			float endDistance = endDistanceVector.Length();
+			idVec3 upDistance = endDistanceVector;
+
+			upDistance.x *= upVector.x;
+			upDistance.y *= upVector.y;
+			upDistance.z *= upVector.z;
+			float upDist = upDistance.Length();
+
+			float nonUpDist = idMath::Sqrt(endDistance*endDistance - upDist*upDist);
+
+			// Check the calculated distances
+			if (upDist < 0.0)
+			{
+				/*can't log on my end
+				DM_LOG(LC_MOVEMENT, LT_DEBUG)LOGSTRING("Mantleable surface was below player's feet. No belly slide allowed.\r");
+				*/
+				b_canBeMantled = false;
+			}
+			else if	(upDist > maxVerticalReachDistance || nonUpDist > maxHorizontalReachDistance)
+			{
+				// Its too far away either horizontally or vertically
+				/*on my end there's not any means of logging
+				DM_LOG(LC_MOVEMENT, LT_DEBUG)LOGSTRING
+				(
+					"Distance to end point was (%f, %f) (horizontal, vertical) which is greater than limits of (%f %f), so mantle cannot be done\n",
+					upDist,
+					nonUpDist,
+					maxVerticalReachDistance,
+					maxHorizontalReachDistance
+				);
+				*/
+
+				b_canBeMantled = false;
+			}
+
+			// Distances are reasonable
+		}
+	}
+
+	// Return result
+	return b_canBeMantled;
+}
+
+/*
+================
+idPhysics_Player::DetermineIfMantleTargetHasMantleableSurface
+================
+*/
+
+bool idPhysics_Player::DetermineIfMantleTargetHasMantleableSurface ( float maxVerticalReachDistance,
+		  	  	  	  	  	  	  	  	  	  	  	  	  	  	  	 float maxHorizontalReachDistance,
+																	 trace_t& in_targetTraceResult,
+																	 idVec3& out_mantleEndPoint
+																   ) {
+	// Never mantle onto non-mantleable entities (early exit)
+	if (in_targetTraceResult.fraction < 1.0f)
+	{
+		idEntity* ent = gameLocal.entities[in_targetTraceResult.c.entityNum];
+
+		if (ent == NULL || !ent->IsMantleable())
+		{
+			// The mantle target is an unmantleable entity
+			return false;
+		}
+	}
+
+	// Try moving player's bounding box up from the trace hit point
+	// in steps up to the maximum distance and see if at any point
+	// there are no collisions. If so, we can mantle.
+
+	// First point to test has gravity orthogonal coordinates set
+	// to the ray trace collision point. It then has gravity non-orthogonal
+	// coordinates set from the current player origin.  However,
+	// for the non-orthogonal-to-gravity coordinates, the trace.c.point
+	// location is a better starting place.  Because of rear surface occlusion,
+	// it will always be closer to the actual "upper" surface than the player
+	// origin unless the object is "below" the player relative to gravity.
+	// And, in that "below" case, mantling isn't possible anyway.
+
+	// This sets coordinates to their components which are orthogonal
+	// to gravity.
+	idVec3 componentOrthogonalToGravity = in_targetTraceResult.c.point;
+	componentOrthogonalToGravity.ProjectOntoPlane(-gravityNormal);
+
+	// This sets coordintes to their components parallel to gravity
+	idVec3 componentParallelToGravity;
+	componentParallelToGravity.x = -gravityNormal.x * in_targetTraceResult.c.point.x;
+	componentParallelToGravity.y = -gravityNormal.y * in_targetTraceResult.c.point.y;
+	componentParallelToGravity.z = -gravityNormal.z * in_targetTraceResult.c.point.z;
+
+	// What parallel to gravity reach distance is already used up at this point
+	idVec3 originParallelToGravity;
+	originParallelToGravity.x = -gravityNormal.x * current.origin.x;
+	originParallelToGravity.y = -gravityNormal.y * current.origin.y;
+	originParallelToGravity.z = -gravityNormal.z * current.origin.z;
+
+	float verticalReachDistanceUsed = (componentParallelToGravity - originParallelToGravity).Length();
+
+	/* no logging system on my end
+	DM_LOG(LC_MOVEMENT, LT_DEBUG)LOGSTRING
+	(
+		"Initial vertical reach distance used = %f out of maximum of %f\r",
+		verticalReachDistanceUsed,
+		maxVerticalReachDistance
+	);
+	*/
+
+	// The first test point
+	idVec3 testPosition = componentOrthogonalToGravity + componentParallelToGravity;
+
+	// Load crouch model
+	// as mantling ends in a crouch
+	if (!(current.movementFlags & PMF_DUCKED))
+	{
+		idBounds bounds = clipModel->GetBounds();
+		bounds[1][2] = pm_crouchheight.GetFloat();
+
+		clipModel->LoadModel( pm_usecylinder.GetBool() ? idTraceModel(bounds, 8) : idTraceModel(bounds) );
+	}
+
+	// We try moving it up by the step distance up to the maximum height until
+	// there are no collisions
+	bool b_keepTesting = verticalReachDistanceUsed < maxVerticalReachDistance;
+	bool b_mantlePossible = false;
+	bool b_lastCollisionWasMantleable = true;
+
+	trace_t worldMantleTrace;
+
+	while (b_keepTesting)
+	{
+		// Try collision in_targetTraceResult
+		idVec3 mantleTraceStart = testPosition;
+		gameLocal.clip.Translation( worldMantleTrace, mantleTraceStart, testPosition, clipModel, clipModel->GetAxis(), clipMask, self );
+
+		if (worldMantleTrace.fraction >= 1.0f)
+		{
+			// We can mantle to there, unless the last test collided with something non-mantleable.
+			// Either way we're done here.
+			b_keepTesting = false;
+
+			if (b_lastCollisionWasMantleable)
+			{
+				b_mantlePossible = true;
+			}
+		}
+		else
+		{
+			idEntity* ent = gameLocal.entities[ worldMantleTrace.c.entityNum ];
+
+			if (ent && !ent->IsMantleable())
+			{
+				// If we collided with a non-mantleable entity, then flag that.
+				// This is to prevent situations where we start out mantling on a low ledge
+				// (like a stair) on which a non-mantleable entity (like an AI) is standing,
+				// and proceed to mantle over the AI.
+				b_lastCollisionWasMantleable = false;
+			}
+			else
+			{
+				// On the other hand, if there's a shelf above the AI, then we can still mantle
+				// the shelf.
+				b_lastCollisionWasMantleable = true;
+			}
+
+			if (verticalReachDistanceUsed < maxVerticalReachDistance)
+			{
+				// Try next test position
+
+				float testIncrementAmount = maxVerticalReachDistance - verticalReachDistanceUsed;
+
+				// Establish upper bound for increment test size
+				if (testIncrementAmount > MANTLE_TEST_INCREMENT)
+				{
+					testIncrementAmount = MANTLE_TEST_INCREMENT;
+				}
+
+				// Establish absolute minimum increment size so that
+				// we don't approach increment size below floating point precision,
+				// which would cause an infinite loop.
+				if (testIncrementAmount < 1.0f)
+				{
+					testIncrementAmount = 1.0f;
+				}
+
+				// Update location by increment size
+				componentParallelToGravity += (-gravityNormal * testIncrementAmount);
+				verticalReachDistanceUsed = (componentParallelToGravity - originParallelToGravity).Length();
+				/* logging not posible in my end
+				DM_LOG(LC_MOVEMENT, LT_DEBUG)LOGSTRING
+				(
+					"Ledge Search: Vertical reach distance used = %f out of maximum of %f\r",
+					verticalReachDistanceUsed,
+					maxVerticalReachDistance
+				);
+				*/
+				// Modify test position
+				testPosition = componentOrthogonalToGravity + componentParallelToGravity;
+			}
+			else
+			{
+				// No surface we could fit on against gravity from raytrace hit point
+				// up as far as we can reach
+				b_keepTesting = false;
+				/* there isn't a logging system on my end
+				DM_LOG(LC_MOVEMENT, LT_DEBUG)LOGSTRING("No mantleable surface within reach distance\r");
+				*/
+			}
+		}
+
+	}
+
+	// Don't mantle onto surfaces that are too steep.
+	// Any surface with an angle whose cosine is
+	// smaller than MIN_FLATNESS is too steep.
+	float minFlatness = pm_mantle_minflatness.GetFloat();
+
+	if (b_mantlePossible)
+	{
+		// Attempt to get the normal of the surface we'd be standing on
+		// In rare cases this may not collide
+		trace_t floorTrace;
+		gameLocal.clip.Translation( floorTrace, testPosition,
+			testPosition + (gravityNormal * MANTLE_TEST_INCREMENT),
+			clipModel, clipModel->GetAxis(), clipMask, self );
+
+		if (floorTrace.fraction < 1.0f)
+		{
+			// Uses the dot product to compare against the cosine of an angle.
+			// Comparing to cos(90)=0 means we can mantle on top of any surface
+			// Comparing to cos(0)=1 means we can only mantle on top of perfectly flat surfaces
+
+			float flatness = floorTrace.c.normal * (-gravityNormal);
+
+			/* no log on my end
+			DM_LOG(LC_MOVEMENT, LT_DEBUG)LOGSTRING(
+				"Floor %.2f,%.2f,%.2f; grav %.2f,%.2f,%.2f; dot %f; %s\r",
+				floorTrace.c.normal.x, floorTrace.c.normal.y, floorTrace.c.normal.z,
+				gravityNormal.x, gravityNormal.y, gravityNormal.z,
+				flatness, flatness < minFlatness ? "too steep" : "OK");
+			*/
+			if (flatness < minFlatness)
+			{
+				b_mantlePossible = false;
+			}
+		}
+	}
+
+	// Must restore standing model if player is not crouched
+	if (!(current.movementFlags & PMF_DUCKED))
+	{
+		// Load back standing model
+		idBounds bounds = clipModel->GetBounds();
+		bounds[1][2] = pm_normalheight.GetFloat();
+
+		clipModel->LoadModel( pm_usecylinder.GetBool() ? idTraceModel(bounds, 8) : idTraceModel(bounds) );
+	}
+
+	// Return result
+	if (b_mantlePossible)
+	{
+		out_mantleEndPoint = testPosition;
+	}
+	return b_mantlePossible;
+}
+
+/*
+================
+idPhysics_Player::DetermineIfPathToMantleSurfaceIsPossible
+================
+*/
+bool idPhysics_Player::DetermineIfPathToMantleSurfaceIsPossible ( float maxVerticalReachDistance,
+																  float maxHorizontalReachDistance,
+																  const idVec3& in_eyePos,
+																  const idVec3& in_mantleStartPoint,
+																  const idVec3& in_mantleEndPoint
+																) {
+	// Make sure path from current location
+	// upward can be traversed.
+	trace_t roomForMoveUpTrace;
+	idVec3 MoveUpStart = in_mantleStartPoint;
+	idVec3 MoveUpEnd;
+
+	// Go to coordinate components against gravity from current location
+	idVec3 componentOrthogonalToGravity;
+	componentOrthogonalToGravity = in_mantleStartPoint;
+	componentOrthogonalToGravity.ProjectOntoPlane (-gravityNormal);
+	MoveUpEnd = componentOrthogonalToGravity;
+
+	MoveUpEnd.x += -gravityNormal.x * in_mantleEndPoint.x;
+	MoveUpEnd.y += -gravityNormal.y * in_mantleEndPoint.y;
+	MoveUpEnd.z += -gravityNormal.z * in_mantleEndPoint.z;
+
+	// Use crouch clip model
+	if (!(current.movementFlags & PMF_DUCKED))
+	{
+		// Load crouching model
+		idBounds bounds = clipModel->GetBounds();
+		bounds[1][2] = pm_crouchheight.GetFloat();
+
+		clipModel->LoadModel( pm_usecylinder.GetBool() ? idTraceModel(bounds, 8) : idTraceModel(bounds) );
+	}
+
+	gameLocal.clip.Translation
+	(
+		roomForMoveUpTrace,
+		MoveUpStart,
+		MoveUpEnd,
+		clipModel,
+		clipModel->GetAxis(),
+		clipMask,
+		self
+	);
+
+	// Done with crouch model if not currently crouched
+	if (!(current.movementFlags & PMF_DUCKED))
+	{
+		// Load back standing model
+		idBounds bounds = clipModel->GetBounds();
+		bounds[1][2] = pm_normalheight.GetFloat();
+
+		clipModel->LoadModel( pm_usecylinder.GetBool() ? idTraceModel(bounds, 8) : idTraceModel(bounds) );
+	}
+
+	// Log
+	if (roomForMoveUpTrace.fraction < 1.0)
+	{
+		/* I DON'T HAVE A LO IN MY SYSTEM
+		DM_LOG(LC_MOVEMENT, LT_DEBUG)LOGSTRING
+		(
+			"Collision test from (%f %f %f) to (%f %f %f) yieled trace fraction %f\r",
+			MoveUpStart.x,
+			MoveUpStart.y,
+			MoveUpStart.z,
+			MoveUpEnd.x,
+			MoveUpEnd.y,
+			MoveUpEnd.z,
+			roomForMoveUpTrace.fraction
+		);
+
+		DM_LOG(LC_MOVEMENT, LT_DEBUG)LOGSTRING ("Not enough vertical clearance along mantle path\r");
+		*/
+		return false;
+	}
+	else
+	{
+		return true;
+	}
+}
+
+/*
+================
+idPhysics_Player::StartMantle
+================
+*/
+void idPhysics_Player::StartMantle ( EMantlePhase initialMantlePhase, idVec3 eyePos, idVec3 startPos, idVec3 endPos ) {
+
+	idPlayer* player = static_cast<idPlayer*>(self);
+
+	// Ishtvan 10/16/05
+	// If mantling starts while on a rope, detach from that rope
+	/* no ropes on our game
+	if ( m_bOnRope )
+	{
+		RopeDetach();
+	}
+	*/
+
+	// If mantling starts while climbing a ladder, detach from climbing surface
+	/* not using this method in order to gather if the player is on a ladder
+	if ( m_bOnClimb )
+	{
+		ClimbDetach();
+	}
+	*/
+	// Ishtvan 11/20/05 - Lower weapons when mantling
+	/* TODO hide the weapon: maybe with a setInfluence?
+	static_cast<idPlayer*>(self)->SetImmobilization( "MantleMove", EIM_WEAPON_SELECT | EIM_ATTACK );
+	*/
+	player->SetInfluenceLevel( INFLUENCE_LEVEL3 );
+	player->LowerWeapon();
+	// greebo: Disable the next mantle start here, this is set to TRUE again
+	// when the jump key is released outside a mantle phase
+	m_mantleStartPossible = false;
+
+	// If mantling from a jump, cancel any velocity so that it does
+	// not continue after the mantle is completed.
+	current.velocity.Zero();
+
+	// Calculate mantle distance
+	idVec3 mantleDistanceVec = endPos - startPos;
+//	float mantleDistance = mantleDistanceVec.Length();
+
+	// Log starting phase
+	if (initialMantlePhase == mantlingHanging)
+	{
+		/* no log on my end
+		DM_LOG(LC_MOVEMENT, LT_DEBUG)LOGSTRING("Mantle starting with hang\r");
+		*/
+		// Impart a force on mantled object?
+		if (m_p_mantledEntity != NULL && self != NULL)
+		{
+			impactInfo_t info;
+			m_p_mantledEntity->GetImpactInfo(self, m_mantledEntityID, endPos, &info);
+
+			if (info.invMass != 0.0f)
+			{
+				m_p_mantledEntity->ActivatePhysics(self);
+				m_p_mantledEntity->ApplyImpulse( self, m_mantledEntityID, endPos, current.velocity / ( info.invMass * 2.0f ) );
+			}
+		}
+	}
+	else if (initialMantlePhase == mantlingPulling)
+	{
+		/* no logging system on my end
+		DM_LOG(LC_MOVEMENT, LT_DEBUG)LOGSTRING("Mantle starting with pull upward\r");
+		*/
+		player->StartSound("snd_player_mantle_pull", SND_CHANNEL_VOICE, 0, false, NULL); // grayman #3010
+	}
+	else if (initialMantlePhase == mantlingShiftHands)
+	{
+		/* no logging system on my end
+		DM_LOG(LC_MOVEMENT, LT_DEBUG)LOGSTRING("Mantle starting with shift hands\r");
+		*/
+	}
+	else if (initialMantlePhase == mantlingPushing)
+	{
+		// Go into crouch
+		current.movementFlags |= PMF_DUCKED;
+
+		// Start with push upward
+		/* no log system on our end
+		DM_LOG(LC_MOVEMENT, LT_DEBUG)LOGSTRING("Mantle starting with push upward\r");
+		*/
+		player->StartSound("snd_player_mantle_push", SND_CHANNEL_VOICE, 0, false, NULL); // grayman #3010
+	}
+
+	m_mantlePhase = initialMantlePhase;
+	m_mantleTime = GetMantleTimeForPhase(m_mantlePhase);
+
+	// Make positions relative to entity
+	if (m_p_mantledEntity != NULL)
+	{
+		idPhysics* p_physics = m_p_mantledEntity->GetPhysics();
+		if (p_physics != NULL)
+		{
+			const idVec3& mantledEntityOrigin = p_physics->GetOrigin();
+			const idMat3& mantledEntityAxis = p_physics->GetAxis();
+
+			// ishtvan 1/3/2010: Incorporate entity rotation as well as translation
+			/*
+			startPos -= mantledEntityOrigin;
+			eyePos -= mantledEntityOrigin;
+			endPos -= mantledEntityOrigin;
+			*/
+			startPos = (startPos - mantledEntityOrigin) * mantledEntityAxis.Transpose();
+			eyePos = (eyePos - mantledEntityOrigin) * mantledEntityAxis.Transpose();
+			endPos = (endPos - mantledEntityOrigin) * mantledEntityAxis.Transpose();
+		}
+	}
+
+	// Set end position
+	m_mantlePushEndPos = endPos;
+
+	if (initialMantlePhase == mantlingPulling || initialMantlePhase == mantlingHanging)
+	{
+		// Pull from start position up to about 2/3 of eye height
+		m_mantlePullStartPos = startPos;
+		m_mantlePullEndPos = eyePos;
+
+		m_mantlePullEndPos += GetGravityNormal() * pm_normalheight.GetFloat() / 3.0f;
+	}
+	else
+	{
+		// Starting with push from current position
+		m_mantlePullEndPos = startPos;
+	}
+}
+
+/*
+================
+idPhysics_Player::GetMantleTimeForPhase
+================
+*/
+float idPhysics_Player::GetMantleTimeForPhase ( EMantlePhase mantlePhase )
+{
+	// Current implementation uses constants
+	switch ( mantlePhase )
+	{
+	case mantlingHanging:
+		return pm_mantle_hang_msecs.GetFloat();
+
+	case mantlingPulling:
+		return pm_mantle_pull_msecs.GetFloat();
+
+	case mantlingShiftHands:
+		return pm_mantle_shift_hands_msecs.GetFloat();
+
+	case mantlingPushing:
+		return pm_mantle_push_msecs.GetFloat();
+
+	default:
+		return 0.0f;
+	}
+}
+
+/*
+================
+idPhysics_Player::UpdateMantleTimers
+================
+*/
+void idPhysics_Player::UpdateMantleTimers()
+{
+	// Frame seconds left
+	float framemSecLeft = framemsec;
+
+	// Update jump held down timer: This actually grows, not drops
+	if (!( current.movementFlags & PMF_JUMP_HELD ) )
+	{
+		m_jumpHeldDownTime = 0;
+	}
+	else
+	{
+		m_jumpHeldDownTime += framemsec;
+	}
+
+	// Skip all this if done mantling
+	if (m_mantlePhase != notMantling && m_mantlePhase != fixTheClipping)
+	{
+		idPlayer* player = static_cast<idPlayer*>(self); // grayman #3010
+		// Handle expiring mantle phases
+		while (framemSecLeft >= m_mantleTime && m_mantlePhase != notMantling)
+		{
+			framemSecLeft -= m_mantleTime;
+			m_mantleTime = 0;
+
+			// Advance mantle phase
+			switch (m_mantlePhase)
+			{
+			case mantlingHanging:
+				/* we don't have a logging system in our end
+				DM_LOG(LC_MOVEMENT, LT_DEBUG)LOGSTRING ("MantleMod: Pulling up...\r");
+				*/
+				m_mantlePhase = mantlingPulling;
+				player->StartSound("snd_player_mantle_pull", SND_CHANNEL_VOICE, 0, false, NULL); // grayman #3010
+				break;
+
+			case mantlingPulling:
+				/* we don't have a log system in our end
+				DM_LOG(LC_MOVEMENT, LT_DEBUG)LOGSTRING ("MantleMod: Shifting hand position...\r");
+				*/
+				m_mantlePhase = mantlingShiftHands;
+				break;
+
+			case mantlingShiftHands:
+				/*in our end there isn't any log
+				DM_LOG(LC_MOVEMENT, LT_DEBUG)LOGSTRING ("MantleMod: Pushing self up...\r");
+				*/
+				m_mantlePhase = mantlingPushing;
+
+				// Go into crouch
+				current.movementFlags |= PMF_DUCKED;
+
+				player->StartSound("snd_player_mantle_push", SND_CHANNEL_VOICE, 0, false, NULL); // grayman #3010
+				break;
+
+			case mantlingPushing:
+				/* no log in our end
+				DM_LOG(LC_MOVEMENT, LT_DEBUG)LOGSTRING ("MantleMod: mantle completed\r");
+				*/
+				// check for clipping problems after mantling
+				// will advance to notMantling when the player isn't clipping
+				m_mantlePhase = fixTheClipping;
+
+				// greebo: Reset the viewangle roll to 0 after mantling, sometimes this stays at 0.6 or something
+				viewAngles.roll = 0;
+
+				if (self != NULL)
+				{
+					//static_cast<idPlayer*>(self)->SetViewAngles(viewAngles);
+					player->SetViewAngles(viewAngles);
+				}
+
+				break;
+
+			default:
+				m_mantlePhase = notMantling;
+				break;
+			}
+
+			// Get time it takes to perform a mantling phase
+			m_mantleTime = GetMantleTimeForPhase(m_mantlePhase);
+
+			// Handle end of mantle
+			if (m_mantlePhase == fixTheClipping)
+			{
+				// Handle end of mantle
+				/* we haven't hidden the weapon since we don't have this immobilization system
+				// Ishtvan 11/20/05 - Raise weapons after mantle is done
+				static_cast<idPlayer*>(self)->SetImmobilization("MantleMove", 0);
+				*/
+				player->RaiseWeapon();
+				player->SetInfluenceLevel( INFLUENCE_NONE );
+			}
+		}
+
+		// Reduce mantle timer
+		if (m_mantlePhase == fixTheClipping)
+		{
+			m_mantleTime = 0;
+		}
+		else
+		{
+			m_mantleTime -= framemSecLeft;
+		}
+	} // This code block is executed only if phase != notMantling && phase != fixClipping
+}
+
+/*
+================
+idPhysics_Player::CheckJumpHeldDown
+================
+*/
+bool idPhysics_Player::CheckJumpHeldDown()
+{
+	return m_jumpHeldDownTime > pm_mantle_jump_hold_trigger.GetInteger();
+}
+
+/*
+================
+idPhysics_Player::MantleMove
+================
+*/
+void idPhysics_Player::MantleMove()
+{
+	idVec3 newPosition = current.origin;
+	idVec3 totalMove(0,0,0);
+	float timeForMantlePhase = GetMantleTimeForPhase(m_mantlePhase);
+
+	// Compute proportion into the current movement phase which we are
+	float timeRatio = 0.0f;
+
+	if (timeForMantlePhase != 0)
+	{
+		timeRatio = (timeForMantlePhase - m_mantleTime) /  timeForMantlePhase;
+	}
+
+	idPlayer* p_player = static_cast<idPlayer*>(self);
+
+	// Branch based on phase
+	if (m_mantlePhase == mantlingHanging)
+	{
+		// Starting at current position, hanging, rocking a bit.
+		float rockDistance = 2.0f;
+
+		newPosition = m_mantlePullStartPos;
+		float timeRadians = idMath::PI * timeRatio;
+		viewAngles.roll = idMath::Sin(timeRadians) * rockDistance;
+		newPosition += (idMath::Sin(timeRadians) * rockDistance) * viewRight;
+
+		if (self != NULL)
+		{
+			//static_cast<idPlayer*>(self)->SetViewAngles(viewAngles);
+			p_player->SetViewAngles(viewAngles);
+		}
+	}
+	else if (m_mantlePhase == mantlingPulling)
+	{
+		// Player pulls themself up to shoulder even with the surface
+		totalMove = m_mantlePullEndPos - m_mantlePullStartPos;
+		newPosition = m_mantlePullStartPos + (totalMove * idMath::Sin(timeRatio * (idMath::PI/2)) );
+	}
+	else if (m_mantlePhase == mantlingShiftHands)
+	{
+		// Rock back and forth a bit?
+		float rockDistance = 1.0f;
+
+		newPosition = m_mantlePullEndPos;
+		float timeRadians = idMath::PI * timeRatio;
+		newPosition += (idMath::Sin(timeRadians) * rockDistance) * viewRight;
+		viewAngles.roll = idMath::Sin(timeRadians) * rockDistance;
+
+		if (self != NULL)
+		{
+			//static_cast<idPlayer*>(self)->SetViewAngles(viewAngles);
+			p_player->SetViewAngles(viewAngles);
+		}
+	}
+	else if (m_mantlePhase == mantlingPushing)
+	{
+		// Rocking back and forth to get legs up over edge
+		float rockDistance = 10.0f;
+
+		// Player pushes themselves upward to get their legs onto the surface
+		totalMove = m_mantlePushEndPos - m_mantlePullEndPos;
+		newPosition = m_mantlePullEndPos + (totalMove * idMath::Sin(timeRatio * (idMath::PI/2)) );
+
+		// We go into duck during this phase and stay there until end
+		current.movementFlags |= PMF_DUCKED;
+
+		float timeRadians = idMath::PI * timeRatio;
+		newPosition += (idMath::Sin (timeRadians) * rockDistance) * viewRight;
+		viewAngles.roll = idMath::Sin (timeRadians) * rockDistance;
+
+		if (self != NULL)
+		{
+			//static_cast<idPlayer*>(self)->SetViewAngles(viewAngles);
+			p_player->SetViewAngles(viewAngles);
+		}
+	}
+
+	// If there is a mantled entity, positions are relative to it.
+	// Transform position to be relative to world origin.
+	// (For now, translation only, TODO: Add rotation)
+	if (m_p_mantledEntity != NULL)
+	{
+		idPhysics* p_physics = m_p_mantledEntity->GetPhysics();
+		if (p_physics != NULL)
+		{
+			// Ishtvan: Track rotation as well
+			// newPosition += p_physics->GetOrigin();
+			newPosition = p_physics->GetOrigin() + p_physics->GetAxis() * newPosition;
+		}
+	}
+
+	SetOrigin(newPosition);
+}
+
+/*
+================
+idPhysics_Player::IsMantling
+================
+*/
+bool idPhysics_Player::IsMantling() const
+{
+	return m_mantlePhase != notMantling && m_mantlePhase != fixTheClipping;
+}
+
+/*
+================
+idPhysics_Player::GetMantlePhase
+================
+*/
+EMantlePhase idPhysics_Player::GetMantlePhase() const
+{
+	return m_mantlePhase;
+}
+
+/*
+================
+idPhysics_Player::CancelMantle
+================
+*/
+void idPhysics_Player::CancelMantle()
+{
+	/* no logging feature on our end
+	DM_LOG(LC_MOVEMENT, LT_DEBUG)LOGSTRING ("Mantle cancelled\r");
+	*/
+	idPlayer* player = static_cast<idPlayer*>(self);
+	if ( player->GetInfluenceLevel() == INFLUENCE_LEVEL3 ) {
+		player->SetInfluenceLevel( INFLUENCE_NONE );
+	}
+	static_cast<idPlayer*>(self)->RaiseWeapon();
+	m_mantlePhase = notMantling;
+	m_mantleTime = 0.0f;
 }

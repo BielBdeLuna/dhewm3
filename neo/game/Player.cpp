@@ -5601,6 +5601,13 @@ void idPlayer::PerformImpulse( int impulse ) {
 			}
 			break;
 		}
+		case IMPULSE_24: {
+			if ( gameLocal.isClient || entityNumber == gameLocal.localClientNum )
+			{
+				physicsObj.PerformMantle();
+			}
+			break;
+		}
 		case IMPULSE_28: {
 			if ( gameLocal.isClient || entityNumber == gameLocal.localClientNum ) {
 				gameLocal.mpGame.CastVote( gameLocal.localClientNum, true );

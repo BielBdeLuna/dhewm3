@@ -71,6 +71,18 @@ typedef struct playerPState_s {
 	int						movementTime;
 } playerPState_t;
 
+// This enumreation defines the phases of the mantling movement
+enum EMantlePhase
+{
+	notMantling	= 0,
+	mantlingHanging,
+	mantlingPulling,
+	mantlingShiftHands,
+	mantlingPushing,
+	fixTheClipping,
+	NumMantlePhases,
+};
+
 class idPhysics_Player : public idPhysics_Actor {
 
 public:
@@ -131,6 +143,211 @@ public:	// common physics interface
 
 	void					WriteToSnapshot( idBitMsgDelta &msg ) const;
 	void					ReadFromSnapshot( const idBitMsgDelta &msg );
+
+	// Checks to see if there is a mantleable target within reach
+	// of the player's view. If so, starts the mantle...
+	// If the player is already mantling, this does nothing.
+	void					PerformMantle();
+
+	// This method returns
+	// true if the player is mantling, false otherwise
+	bool IsMantling() const;
+
+	// This returns the current mantling phase
+	EMantlePhase GetMantlePhase() const;
+
+	// Cancels any current mantle
+	void CancelMantle();
+
+protected:
+
+	/*!
+	* The current mantling phase
+	*/
+	EMantlePhase m_mantlePhase;
+
+	/*!
+	* How long will the current phase of the mantle operation take?
+	* Uses milliseconds and counts down to 0.
+	*/
+	float m_mantleTime;
+
+	/**
+	 * greebo: Set to TRUE if the next mantling can start. Set to FALSE at the
+	 *         beginning of a mantle process - the jump button has to be released
+	 *         again during a non-mantling phase to set this to TRUE again.
+	 */
+	bool m_mantleStartPossible;
+
+	/*!
+	* Points along the mantle path
+	*/
+	idVec3 m_mantlePullStartPos;
+	idVec3 m_mantlePullEndPos;
+	idVec3 m_mantlePushEndPos;
+
+	/*!
+	* Pointer to the entity being mantled.
+	* This is undefined if m_mantlePhase == notMantling_DarkModMantlePhase
+	*/
+	idEntity* m_p_mantledEntity;
+
+	/*!
+	* ID number of the entity being mantled
+	* This is 0 if m_mantlePhase == notMantling_DarkModMantlePhase
+	*/
+	int m_mantledEntityID;
+
+	/*!
+	* Tracks, in milliseconds, how long jump button has been held down
+	* Counts upwards from 0.
+	*/
+	float m_jumpHeldDownTime;
+
+	/*!
+	*
+	* Internal method to start the mantle operation
+	*
+	* @param[in] initialMantlePhase The mantle phase in which the mantle starts.
+	* @param[in] eyePos The position of the player's eyes in the world
+	* @param[in] startPos The position of the player's feet at the start of the mantle
+	* @param[in] endPos The position of the player's feet at the end of the mantle
+	*/
+	void 					StartMantle ( EMantlePhase initialMantlePhase, idVec3 eyePos, idVec3 startPos, idVec3 endPos );
+
+	/*!
+	* Internal method which determines the maximum vertical
+	* and horizontal distances for mantling
+	*
+	* @param[out] out_maxVerticalReachDistance The distance that the player can reach vertically, from their current origin
+	* @param[out] out_maxHorizontalReachDistance The distance that the player can reach horizontally, from their current origin
+	* @param[out] out_maxMantleTraceDistance The maximum distance that the traces should look in front of the player for a mantle target
+	*/
+	void 					GetCurrentMantlingReachDistances ( float& out_maxVerticalReachDistance,
+															   float& out_maxHorizontalReachDistance,
+															   float& out_maxMantleTraceDistance
+										  	  	  	  	  	 );
+
+	/*!
+	* This method runs the trace to find a mantle target
+	* It first attempts to raycast along the player's gaze
+	* direction to determine a target. If it doesn't find one,
+	* then it tries a collision test along a vertical plane
+	* from the players feet to their height, out in the direction
+	* the player is facing.
+	*
+	* @param[in] maxMantleTraceDistance The maximum distance from the player that should be used in the traces
+	* @param[in] eyePos The position of the player's eyes, used for the beginning of the gaze trace
+	* @param[in] forwardVec The vector gives the direction that the player is facing
+	* @param[out] out_trace This trace structure will hold the result of whichever trace succeeds. If both fail, the trace fraction will be 1.0
+	*/
+	void 					MantleTargetTrace ( float maxMantleTraceDistance,
+												const idVec3& eyePos,
+												const idVec3& forwardVec,
+												trace_t& out_trace
+											  );
+
+	/*!
+	* Given a trace which resulted in a detected mantle
+	* target, this method checks to see if the target
+	* is mantleable.  It looks for a surface up from gravity
+	* on which the player can fit while crouching. It also
+	* checks that the distance does not violate horizontal
+	* and vertical displacement rules for mantling. Finally
+	* it checks that the path to the mantleable surface is
+	* not blocked by obstructions.
+	*
+	* This method calls DetermineIfMantleTargetHasMantleableSurface and
+	* also DetermineIfPathToMantleSurfaceIsPossible
+	*
+	* @param[in] maxVerticalReachDistance The maximum distance from the player's origin that the player can reach vertically
+	* @param[in] maxHorizontalReachDistance The maximum distance from the player's origin that the player can reach horizontally
+	* @param[in] eyePos The position of the player's eyes (camera point) in the world coordinate system
+	* @param[in] in_targetTraceResult Pass in the trace result from MantleTargetTrace
+	* @param[out] out_mantleEndPoint If the return value is true, this passes back out what the player's origin will be at the end of the mantle
+	*
+	* @returns the result of the test
+	* @retval true if the mantle target can be mantled
+	* @retval false if the mantle target cannot be mantled
+	*
+	*/
+	bool 					ComputeMantlePathForTarget ( float maxVerticalReachDistance,
+														 float maxHorizontalReachDistance,
+														 const idVec3& eye,
+														 trace_t& in_targetTraceResult,
+														 idVec3& out_mantleEndPoint
+													   );
+	/*!
+	*
+	* This function checks the collision target of the mantle
+	* trace to see if there is a surface within reach distance
+	* upon which the player will fit.
+	*
+	* @param[in] maxVerticalReachDistance The maximum distance that the player can reach vertically from their current origin
+	* @param[in] maxHorizontalReachDistance The maximum distance that the player can reach horizontally from their current origin
+	* @param[in] in_targetTraceResult The trace which found the mantle target
+	* @param[out] out_mantleEndPoint If the return code is true, this out paramter specifies the position of the player's origin at the end of the mantle move.
+	*
+	* @return the result of the test
+	* @retval true if the mantle target has a mantleable surface
+	* @retval false if the mantel target does not have a mantleable surface
+	*
+	*/
+	bool 					DetermineIfMantleTargetHasMantleableSurface ( float maxVerticalReachDistance,
+																		  float maxHorizontalReachDistance,
+																		  trace_t& in_targetTraceResult,
+																		  idVec3& out_mantleEndPoint
+																		);
+
+	/*!
+	* Call this method to test whether or not the path
+	* along the mantle movement is free of obstructions.
+	*
+	* @param[in] maxVerticalReachDistance The maximum distance that the player can reach vertically from their current origin
+	* @param[in] maxHorizontalReachDistance The maximum distance that the player can reach horizontally from their current origin
+	* @param[in] eyePos The position of the player's eyes in the world
+	* @param[in] mantleStartPoint The player's origin at the start of the mantle movement
+	* @param[in] mantleEndPoint The player's origin at the end of the mantle movement
+	*
+	* @return the result of the test
+	* @retval true if the path is clear
+	* @retval false if the path is blocked
+	*/
+	bool 					DetermineIfPathToMantleSurfaceIsPossible ( float maxVerticalReachDistance,
+																	   float maxHorizontalReachDistance,
+																	   const idVec3& eyePos,
+																	   const idVec3& mantleStartPoint,
+																	   const idVec3& mantleEndPoint
+																	 );
+	/*!
+	* This method determines the mantle time required for each phase of the mantle.
+	* I made this a function so you could implement things such as carry-weight,
+	* tiredness, length of lift....
+	* @param[in] mantlePhase The mantle phase for which the duration is to be retrieved
+	*/
+	float 					GetMantleTimeForPhase ( EMantlePhase mantlePhase );
+
+	/*!
+	* This handles the reduction of the mantle timer by the
+	* number of milliseconds between animation frames. It
+	* uses the timer results to update the mantle timers.
+	*/
+	void 					UpdateMantleTimers();
+
+	/*!
+	* This handles the movement of the the player during
+	* the phases of the mantle.  It performs the translation
+	* of the player along the mantle path, the camera movement
+	* that creates the visual effect, and the placing of the
+	* player into a crouch during the end phase of the mantle.
+	*
+	*/
+	void 					MantleMove();
+
+	// Tests if player is holding down jump while already jumping
+	// (can be used to trigger mantle)
+	bool 					CheckJumpHeldDown();
+
 
 private:
 	// player physics state
