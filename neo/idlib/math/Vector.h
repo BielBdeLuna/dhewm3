@@ -389,6 +389,7 @@ public:
 
 	void			Lerp( const idVec3 &v1, const idVec3 &v2, const float l );
 	void			SLerp( const idVec3 &v1, const idVec3 &v2, const float l );
+	int				ConeAlignment( idVec3 vec1, idVec3 vec2, float angle_threshold);
 };
 
 extern idVec3 vec3_origin;

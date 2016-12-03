@@ -129,3 +129,24 @@ float idMath::BitsToFloat( int i, int exponentBits, int mantissaBits ) {
 	value = sign << IEEE_FLT_SIGN_BIT | ( exponent + IEEE_FLT_EXPONENT_BIAS ) << IEEE_FLT_MANTISSA_BITS | mantissa;
 	return *reinterpret_cast<float *>(&value);
 }
+
+/*
+================
+idMath::MinNormalizeMax
+================
+*     //////////////////////////////////////////////////////////////////
+*    //      return a normalized value between a min and a max       //
+*   //////////////////////////////////////////////////////////////////
+*/
+float idMath::MinNormalizeMax(float number, float max, float min ) {
+    float interval, incorporated;
+
+    interval = max - min;
+    incorporated = number - min;
+
+    if ( incorporated <= 0.0f ) {
+    	return 0.0f;
+    } else {
+    	return ( ( 1 / interval ) * incorporated );
+    }
+}
