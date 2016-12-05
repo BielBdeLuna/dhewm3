@@ -256,6 +256,10 @@ public:
 	idScriptBool			AI_TELEPORT;
 	idScriptBool			AI_TURN_LEFT;
 	idScriptBool			AI_TURN_RIGHT;
+	idScriptBool			AI_SKIMMING;
+	idScriptBool			AI_SKIMMING_STUCK;
+	idScriptBool			AI_SKIM_FORWARD;
+	idScriptBool			AI_SKIM_BACKWARD;
 
 	// inventory
 	idInventory				inventory;
@@ -548,6 +552,9 @@ private:
 	idVec3					viewBob;
 	int						landChange;
 	int						landTime;
+
+	idVec3					p_skim_dir_forward;
+	idVec3					p_skim_dir_right;
 
 	int						currentWeapon;
 	int						idealWeapon;

@@ -217,7 +217,6 @@ public:
 	static const float			INFINITY;					// huge number which should be larger than any valid number used
 	static const float			FLT_EPSILON;				// smallest positive number such that 1.0+FLT_EPSILON != 1.0
 
-	float						MinNormalizeMax( float number, float max, float min );
 private:
 	enum {
 		LOOKUP_BITS				= 8,

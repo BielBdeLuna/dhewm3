@@ -29,6 +29,8 @@ If you have questions concerning this license or the applicable additional terms
 #include "sys/platform.h"
 #include "gamesys/SysCvar.h"
 #include "Entity.h"
+#include "../Player.h"
+#include "idlib/math/blMathUtils.h"
 
 #include "physics/Physics_Player.h"
 
@@ -52,7 +54,7 @@ const float PM_WATERFRICTION	= 1.0f;
 const float PM_FLYFRICTION		= 3.0f;
 const float PM_NOCLIPFRICTION	= 12.0f;
 
-const float MIN_WALK_NORMAL		= 0.7f;		// can't walk on very steep slopes
+const float MIN_WALK_NORMAL		= 0.7f;		// can't walk on very steep slopes (angle: 45,572995999 with: idMath::ACos( MIN_WALK_NORMAL ) )
 const float OVERCLIP			= 1.001f;
 
 // movementFlags
@@ -64,6 +66,9 @@ const int PMF_JUMP_HELD			= 16;		// set when jump button is held down
 const int PMF_TIME_LAND			= 32;		// movementTime is time before rejump
 const int PMF_TIME_KNOCKBACK	= 64;		// movementTime is an air-accelerate only time
 const int PMF_TIME_WATERJUMP	= 128;		// movementTime is waterjump
+const int PMF_SKIMMED			= 256;		// set when started skimming
+const int PMF_DODGED			= 512;		// set when dodging reset the next onGround, but we could start the dodge already in air
+const int PMF_DUCK_HELD			= 1024;		// set when the duck button is held down
 const int PMF_ALL_TIMES			= (PMF_TIME_WATERJUMP|PMF_TIME_LAND|PMF_TIME_KNOCKBACK);
 
 int c_pmove = 0;
@@ -474,7 +479,7 @@ void idPhysics_Player::Friction( void ) {
 			// if getting knocked back, no friction
 			if ( !(current.movementFlags & PMF_TIME_KNOCKBACK) ) {
 				control = speed < PM_STOPSPEED ? PM_STOPSPEED : speed;
-				drop += control * PM_FRICTION * frametime;
+				drop += control * PM_FRICTION * frametime * currentFrictionMultiplier;
 			}
 		}
 	}
@@ -1070,33 +1075,138 @@ Sets clip model size
 ==============
 */
 void idPhysics_Player::CheckDuck( void ) {
-	trace_t	trace;
-	idVec3 end;
-	idBounds bounds;
-	float maxZ;
+	trace_t		trace;
+	idVec3 		end;
+	idBounds 	bounds;
+	float 		maxZ;
+	bool		unDuck;
 
 	if ( current.movementType == PM_DEAD ) {
 		maxZ = pm_deadheight.GetFloat();
 	} else {
-		// stand up when up against a ladder
-		if ( command.upmove < 0 && !ladder ) {
-			// duck
-			current.movementFlags |= PMF_DUCKED;
+		unDuck = false; // initialize it
+
+		if ( command.upmove < -10 ) {
+			if ( ( !( current.movementFlags & PMF_DUCK_HELD ) ) && ( current.movementFlags & PMF_SKIMMED ) ) {
+					//if ( debugLevel ) {
+					//	gameLocal.Printf("CheckDuck: CancelSkim because I crouched back again!\n");
+					//}
+					idPhysics_Player::CancelSkim();
+			}
+			//held duck button
+			if ( !( current.movementFlags & PMF_DUCK_HELD ) ) {
+				//if ( debugLevel ) {
+				//	gameLocal.Printf("CheckDuck: duck button held\n");
+				//}
+			}
+			current.movementFlags |= PMF_DUCK_HELD;
 		} else {
-			// stand up if possible
+			//unheld duck button
+			if ( current.movementFlags & PMF_DUCK_HELD ) {
+				//if ( debugLevel ) {
+				//	gameLocal.Printf("CheckDuck: un-held duck button\n");
+				//}
+			}
+			current.movementFlags &= ~PMF_DUCK_HELD;
+		}
+
+		while ( true ) {
+			if ( !( current.movementFlags & PMF_DUCK_HELD ) ) {
+				if ( !( current.movementFlags & PMF_SKIMMED ) ) {
+					unDuck = true;
+					break;
+				}
+			}
+
+			//  if we are in a ladder
+			if ( ladder ) {
+				unDuck = true;
+				break;
+			}
+
+			// if time from has runned out then
+			if ( ( current.movementFlags & PMF_SKIMMED ) && ( ( skimPhase == SkimmingEnd ) || ( skimPhase == SkimmingCancel ) || ( skimPhase == noSkimming ) ) ) {
+				unDuck = true;
+				break;
+			}
+
+			// first test if we start skimming
+			if ( elegibleForSkim ) {
+				if ( idPhysics_Player::DoWeSkim() ) {
+					elegibleForSkim = false;
+
+					current.movementFlags |= PMF_SKIMMED;
+					//if ( debugLevel ) {
+					//	gameLocal.Printf("checkDuck: moveflag skimmed!\n");
+					//}
+					idPhysics_Player::StartSkim();
+				} /*else {
+					gameLocal.Printf("checkDuck: we don't skim even if eligible\n");
+				}
+			} else {
+				gameLocal.Printf("checkDuck: not eligible for skimming\n");*/
+			}
+
+			// if we're not skimming then duck
+			if ( !( current.movementFlags & PMF_SKIMMED ) ) {
+				current.movementFlags |= PMF_DUCKED;
+				//gameLocal.Printf("checkDuck: ducked\n");
+			} /*else {
+				gameLocal.Printf("checkDuck: not ducking because skimming\n");
+			}*/
+			unDuck = false;
+			break;
+		}
+
+		// test whatever new state we end up after un-helfing duck button or by timing-out the states the player is subjected to
+		if ( unDuck ) {
+
+			// try to stand up after skimming has been canceled or just has finished
+			if ( ( skimPhase == SkimmingEnd ) || ( skimPhase == SkimmingCancel ) || ( skimPhase == noSkimming ) ) {
+				end = current.origin - ( pm_normalheight.GetFloat() - pm_skim_height.GetFloat() ) * gravityNormal;
+				gameLocal.clip.Translation( trace, current.origin, end, clipModel, clipModel->GetAxis(), clipMask, self );
+				if ( trace.fraction >= 1.0f ) {
+					// free up the skimming motion if we are not trapped under a low ceiling,
+					// and it's the correct skimPhase!
+					if ( ( skimPhase == SkimmingEnd ) || ( skimPhase == SkimmingCancel ) || ( skimPhase == noSkimming ) ) {
+						current.movementFlags &= ~PMF_SKIMMED;
+						//if ( debugLevel ) {
+						//	gameLocal.Printf("checkDuck: moveflag unskimmed!\n");
+						//}
+						// since we latter test if we are ducking we make sure the next test is run
+						// so if we are in a hole greater than skim height but smaller than duck height+
+						// we handle the situation much correctly
+						current.movementFlags |= PMF_DUCKED;
+					}
+				} else {
+					// we are trapped in a skim-height hole, a much lower height than a duck-height hole...
+					//gameLocal.Printf("CheckDuck: we're stuck skimming\n");
+				}
+			}
+			// try to stand up after ducking
 			if ( current.movementFlags & PMF_DUCKED ) {
-				// try to stand up
 				end = current.origin - ( pm_normalheight.GetFloat() - pm_crouchheight.GetFloat() ) * gravityNormal;
 				gameLocal.clip.Translation( trace, current.origin, end, clipModel, clipModel->GetAxis(), clipMask, self );
 				if ( trace.fraction >= 1.0f ) {
+					//if ( debugLevel ) {
+					//	gameLocal.Printf("CheckDuck: we unduck\n");
+					//}
 					current.movementFlags &= ~PMF_DUCKED;
+				} else {
+					//we are trapped in a duck height hole
+					//gameLocal.Printf("CheckDuck: we're stuck duked\n");
 				}
 			}
 		}
 
-		if ( current.movementFlags & PMF_DUCKED ) {
+		if ( ( current.movementFlags & PMF_DUCKED ) && !( current.movementFlags & PMF_SKIMMED ) ) {
 			playerSpeed = crouchSpeed;
 			maxZ = pm_crouchheight.GetFloat();
+		} else if ( current.movementFlags & PMF_SKIMMED ) {
+			if ( skimPhase == noSkimming ) {
+				playerSpeed = crouchSpeed;
+			}
+			maxZ = pm_skim_height.GetFloat();
 		} else {
 			maxZ = pm_normalheight.GetFloat();
 		}
@@ -1185,7 +1295,7 @@ bool idPhysics_Player::CheckJump( void ) {
 		// not holding jump
 		return false;
 	}
-
+	/*
 	// must wait for jump to be released
 	if ( current.movementFlags & PMF_JUMP_HELD ) {
 		return false;
@@ -1194,6 +1304,27 @@ bool idPhysics_Player::CheckJump( void ) {
 	// don't jump if we can't stand up
 	if ( current.movementFlags & PMF_DUCKED ) {
 		return false;
+	}
+	*/
+	// must wait for jump to be released
+	if ( current.movementFlags & PMF_JUMP_HELD ) {
+		if ( skimPhase != SkimmingCancel ) {
+			return false;
+		}
+	}
+
+	if ( current.movementFlags & PMF_SKIMMED ) {
+		if ( debugLevel ) {
+			gameLocal.Printf("CheckJump: CancelSkim because I jumped!\n");
+		}
+		idPhysics_Player::CancelSkim(); //so if already in SkimmingEnd we waste the jump but don't create any problems with the skimming ending
+	}
+
+	// don't jump if we can't stand up unless we're canceling the skimming motion in which case we should be able to jump even when pressing the duck button
+	if ( current.movementFlags & PMF_DUCKED ) {
+		if ( skimPhase != SkimmingCancel ) {
+			return false;
+		}
 	}
 
 	groundPlane = false;		// jumping away
@@ -1347,6 +1478,11 @@ void idPhysics_Player::MovePlayer( int msec ) {
 		return;
 	}
 
+	lastMovementFlow = movementFlow;
+	movementFlow = current.velocity;
+
+	elegibleForSkim = idPhysics_Player::EligibleToSkim();
+
 	// move the player velocity into the frame of a pusher
 	current.velocity -= current.pushVelocity;
 
@@ -1389,8 +1525,16 @@ void idPhysics_Player::MovePlayer( int msec ) {
 	// set clip model size
 	idPhysics_Player::CheckDuck();
 
+	// if in debug mode display the debug graphics
+	idPhysics_Player::DisplayDebugGraphics();
+
 	// handle timers
 	idPhysics_Player::DropTimers();
+
+	//only update any skim related stuff when in a skim movement
+	if ( skimPhase != noSkimming ) {
+		idPhysics_Player::UpdateSkimFSM();
+	}
 
 	// move
 	if ( current.movementType == PM_DEAD ) {
@@ -1400,8 +1544,10 @@ void idPhysics_Player::MovePlayer( int msec ) {
 	else if ( ladder ) {
 		// going up or down a ladder
 		idPhysics_Player::LadderMove();
-	}
-	else if ( current.movementFlags & PMF_TIME_WATERJUMP ) {
+	} else if ( skimPhase != noSkimming ) {
+		// skimming in the floor
+		idPhysics_Player::SkimMove();
+	} else if ( current.movementFlags & PMF_TIME_WATERJUMP ) {
 		// jumping out of water
 		idPhysics_Player::WaterJumpMove();
 	}
@@ -1520,6 +1666,18 @@ idPhysics_Player::idPhysics_Player( void ) {
 	ladderNormal.Zero();
 	waterLevel = WATERLEVEL_NONE;
 	waterType = 0;
+
+	//skim motion
+	idealFrictionMultiplier = 1.0f;
+	skimPhase = noSkimming;
+	lastSkimPhaseIteration = noSkimming;
+	currentFrictionMultiplier = 1.0f;
+	skimmingDir_forward.Zero();
+	skimmingDir_right.Zero();
+	skimmingDir_up.Zero();
+	movementFlow.Zero();
+	lastMovementFlow.Zero();
+	elegibleForSkim = false;
 }
 
 /*
@@ -2040,5 +2198,612 @@ void idPhysics_Player::ReadFromSnapshot( const idBitMsgDelta &msg ) {
 
 	if ( clipModel ) {
 		clipModel->Link( gameLocal.clip, self, 0, current.origin, clipModel->GetAxis() );
+	}
+}
+
+void idPhysics_Player::DisplayDebugGraphics( void ) {
+	if ( debugLevel ) {
+		idVec3	visual_origin = current.origin + ( gravityNormal * -8 );
+		idVec3 	p_dirForward = -gravityNormal.Cross( viewRight );
+		p_dirForward.Normalize();
+		//p_dirForward = -p_dirForward.Truncate( 1.0f );
+		idVec3 	crux_1 = visual_origin + ( viewRight * -16 );
+		idVec3 	crux_2 = visual_origin + ( viewRight * 16 );
+		idVec3 	crux_3 = visual_origin + ( p_dirForward * -16 );
+		idVec3 	crux_4 = visual_origin + ( p_dirForward * 16 );
+		idVec3 	crux_5 = visual_origin + ( gravityNormal * -16 );
+		idVec3 	crux_6 = visual_origin + ( gravityNormal * 16 );
+		idVec3  destine = visual_origin + movementFlow;
+		idVec3	Text_indent = idVec3 ( 0.0, 0.0, 4.0 );
+		idVec3	destine_text = destine + Text_indent;
+		idVec3	walk_dest = visual_origin + ( p_dirForward * pm_walkspeed.GetFloat() ) + idVec3 ( 6.0, 0.0, -6.0 );
+
+		idVec4	c_white	= idVec4( 1.0, 1.0, 1.0, 1.0 );
+		idVec4	c_red 	= idVec4( 1.0, 0.0, 0.0, 1.0 );
+		//idVec4	c_green = idVec4( 0.0, 1.0, 0.0, 1.0 );
+		idVec4 	c_blue 	= idVec4( 0.0, 0.0, 1.0, 1.0 );
+
+		//gameRenderWorld->DebugArrow( c_white, visual_origin, walk_dest, 16, 0);
+		gameRenderWorld->DebugLine( c_white, crux_1, crux_2, 0, false );
+		gameRenderWorld->DebugLine( c_white, crux_3, crux_4, 0, false );
+		gameRenderWorld->DebugLine( c_white, crux_5, crux_6, 0, false );
+		gameRenderWorld->DebugCircle( c_red, visual_origin, gravityNormal, pm_runspeed.GetFloat(), 32, 0, false );
+		gameRenderWorld->DebugCircle( c_red, visual_origin, gravityNormal, pm_walkspeed.GetFloat(), 32, 0, false );
+		gameRenderWorld->DebugCircle( c_red, visual_origin, gravityNormal, pm_crouchspeed.GetFloat(), 32, 0, false );
+		gameRenderWorld->DrawText( "walkSpeed", walk_dest, 0.25, c_blue, clipModelAxis, 0, 0, false );
+
+		gameRenderWorld->DebugArrow( c_blue, visual_origin, destine, 16, 0 );
+		gameRenderWorld->DrawText( "movementFlow", destine_text, 0.5, c_blue, clipModelAxis, 0, 0, false );
+	}
+}
+
+/*
+================
+idPhysics_Player::GetHorizontalControlFlow
+================
+*/
+idVec3 idPhysics_Player::GetHorizontalControlFlow( void ) {
+	float		scale;
+	idVec3 		wishvel, wishvel_up, body_u;
+
+	scale = idPhysics_Player::CmdScale( command );
+
+	// project moves down to flat plane
+	viewForward -= (viewForward * gravityNormal) * gravityNormal;
+	viewRight -= (viewRight * gravityNormal) * gravityNormal;
+	body_u = -gravityNormal;
+
+	if ( groundPlane ) {
+		//if there is a ground plane
+		body_u = groundTrace.c.normal;
+		// project the forward and right directions onto the ground plane
+		viewForward.ProjectOntoPlane( body_u, OVERCLIP );
+		viewRight.ProjectOntoPlane( body_u, OVERCLIP );
+	}
+	//
+	viewForward.Normalize();
+	viewRight.Normalize();
+
+	wishvel = scale * ( viewForward * command.forwardmove + viewRight * command.rightmove );
+
+	if ( debugLevel ) {
+		idVec3	visual_origin = current.origin + ( gravityNormal * -8 );
+		idVec4	c_green = idVec4( 0.0, 1.0, 0.0, 1.0 );
+		idVec3	dest =	visual_origin + wishvel;
+		gameRenderWorld->DebugArrow( c_green, visual_origin, dest, 8, 0 );
+	}
+	return wishvel;
+}
+
+/*
+================
+idPhysics_Player::GetVerticalControlFlow
+================
+*/
+idVec3 idPhysics_Player::GetVerticalControlFlow( void ) {
+	idVec3 wishvel, body_up;
+
+	body_up = -gravityNormal;
+
+	if ( groundPlane ) {
+		body_up = groundTrace.c.normal;
+	}
+
+	wishvel = idPhysics_Player::CmdScale( command ) * body_up * command.upmove;
+
+	if ( debugLevel ) {
+		idVec3 dest;
+		idVec3 visual_origin = current.origin + ( gravityNormal * -8.0f );
+		if ( command.upmove ) {
+			idVec4		c_green 	= idVec4( 0.0, 1.0, 0.0, 1.0 );
+			dest 					=	visual_origin + wishvel;
+			gameRenderWorld->DebugArrow( c_green, visual_origin, dest, 8, 0 );
+		} else {
+			idVec4	c_lightgreen	= idVec4( 0.5, 1.0, 0.5, 1.0 );
+			dest 					=	visual_origin + ( body_up * 8.0f );
+			gameRenderWorld->DebugLine( c_lightgreen, visual_origin, dest, 0, false );
+		}
+	}
+
+	return wishvel;
+}
+/*
+================
+idPhysics_Player::CorrectDir
+================
+corrects the Dir directions from the skim motion
+*/
+void idPhysics_Player::CorrectDir( idVec3 new_up, idVec3 old_up, idVec3 &dir_up, idVec3 &dir_forward, idVec3 &dir_right ) {
+	new_up.Normalize(); //this might not be necessary, but never say never
+	old_up.Normalize();
+	if ( new_up * old_up == 1.0f  ) {
+		return;
+	} else {
+		dir_up = new_up;
+		//dir_forward is the only variable we take from itself from before any correction
+		dir_forward.ProjectOntoPlane( dir_up, OVERCLIP );
+		dir_forward.Normalize();
+		dir_right = -dir_up.Cross( dir_forward );
+		dir_right.Normalize();
+		return; // is it necessary?
+	}
+}
+
+/*
+================
+idPhysics_Player::EligibleToSkim
+================
+checks whether we are eligible for skimming or not, called every frame the player isn't pressing crouch
+*/
+bool idPhysics_Player::EligibleToSkim( void ) {
+	int aligned;
+	idVec3 	Horizontal_forward, control_dir;
+	control_dir = idPhysics_Player::GetHorizontalControlFlow();
+
+	if ( debugLevel && ( skimPhase == noSkimming ) ) {
+		gameLocal.Printf( "TESTING IF ELIGIBLE TO SKIM\n" );
+	}
+	while( true ) {
+		/* mostly tests related to speed, not tests related to the ground */
+		if ( !pm_skimming.GetBool() ) { break; }
+		if ( skimPhase != noSkimming ) { break;	}
+		Horizontal_forward = viewForward;
+		Horizontal_forward.ProjectOntoPlane( -gravityNormal, OVERCLIP );
+		Horizontal_forward.Normalize();
+		aligned = blMathUtils::ConeAlignment( Horizontal_forward, control_dir, 30.0f );
+		if ( ( aligned == 0 ) || ( aligned == -1 ) ) {
+			if ( debugLevel && ( skimPhase == noSkimming ) ) {
+				if ( aligned == 0 ) {
+					gameLocal.Printf( "there is further deviation of 30 degrees to forward!\n" );
+				}
+			}
+			break;
+		}
+		if ( waterLevel >= WATERLEVEL_FEET ) { break; }
+		if ( movementFlow.Length() <= ( pm_walkspeed.GetFloat() + 0.01f ) ) { break; } //add and extra value so float precision doesn't break it!
+		Horizontal_forward = lastMovementFlow;
+		Horizontal_forward.ProjectOntoPlane( -gravityNormal, OVERCLIP );
+		Horizontal_forward.Normalize();
+		aligned = blMathUtils::ConeAlignment( Horizontal_forward, control_dir, 20.0f );
+		if ( ( aligned == 0 ) || ( aligned == -1 ) ) {
+			if ( debugLevel && ( skimPhase == noSkimming ) ) {
+				if ( aligned == 0 ) {
+					gameLocal.Printf( "un-eligible because we're turning!\n" );
+				} else {
+					gameLocal.Printf( "control_dir is 0.0f!\n" );
+				}
+			}
+			break;
+		}
+		if ( debugLevel && ( skimPhase == noSkimming ) ) {
+			gameLocal.Printf( "ELEGIBLE: we are eligible for skimming\n" );
+		}
+		return true;
+	}
+	if ( debugLevel && ( skimPhase == noSkimming ) ) {
+		gameLocal.Printf( "ELEGIBLE: we aren't eligible for skimming\n" );
+	}
+	return false;
+}
+
+/*
+================
+idPhysics_Player::DoWeSkim
+================
+checks whether we can skim or not, called before starting any skimming
+*/
+bool idPhysics_Player::DoWeSkim( void ) {
+	if ( debugLevel ) {
+		gameLocal.Printf( "TESTING IF SKIM\n" );
+	}
+	while( true ) {
+		if ( !groundPlane ) { break; }
+		//if ( /* terrain material doesn't allow it */ ) { break; }
+		//if ( /* not enough space */ ) { break; } //needs planning AI
+		//if ( /* risky move due the terrain */ ) { break; } //needs planning AI
+		if ( ( groundTrace.c.normal * -gravityNormal ) < MIN_WALK_NORMAL ) { break; }
+		int alignmnent = blMathUtils::ConeAlignment( groundTrace.c.normal, movementFlow, 80.0f );
+		if ( ( alignmnent == 1 ) || ( alignmnent == -1 ) ) { break; }
+
+		if ( debugLevel ) {
+			gameLocal.Printf( "SKIM: we will skim\n" );
+		}
+		return true;
+	}
+	if ( debugLevel ) {
+		gameLocal.Printf( "SKIM: we won't skim\n" );
+	}
+	return false;
+}
+
+/*
+================
+idPhysics_Player::DoWekeepSkimming
+================
+checks whether we can keep skimming or not
+*/
+bool idPhysics_Player::DoWekeepSkimming( void ) {
+	if ( debugLevel ) {
+		gameLocal.Printf( "TESTING IF KEEP SKIMMING\n" );
+	}
+	while( true ) {
+		if ( !groundPlane ) {
+			gameLocal.Printf( "KEEP: there is no ground to keep skimming!\n" );
+			break;
+		} //TODO this souldn't be a case for stopping the skimming
+		if ( ( groundTrace.c.normal * -gravityNormal ) < MIN_WALK_NORMAL ) { break; }
+		if ( movementFlow.Length() <= pm_crouchspeed.GetFloat() ) { break; }
+		if ( blMathUtils::ConeAlignment( -skimmingDir_forward, movementFlow, 90.0f ) != 0 ) { break; }
+
+		if ( debugLevel ) {
+			gameLocal.Printf( "KEEP: we keep Skimming\n" );
+		}
+		return true;
+	}
+	if ( debugLevel ) {
+		gameLocal.Printf( "KEEP: we stop Skimming now!\n" );
+	}
+	return false;
+}
+
+/*
+================
+idPhysics_Player::CheckSkimHit
+================
+*/
+bool idPhysics_Player::CheckSkimHit( void ) {
+	//check if we hit something
+	//if the hit normal is not contraposed to skimmingDir_forward
+		//move along the wall
+		//make scrape sound
+		//get hurt
+	//else
+
+	//gameLocal.Printf("we hit a wall or something whilst on our skim journey!\n");
+	return false;
+}
+
+/*
+================
+idPhysics_Player::IsSkimming
+checks whether we are skimming or not. particularly for the player to change the view.
+================
+*/
+bool idPhysics_Player::IsSkimming( void ) {	return ( ( current.movementFlags & PMF_SKIMMED ) != 0 ); }
+
+/*
+================
+idPhysics_Player::GetSkimmingDir
+allows the player to get the skimming direction.
+================
+*/
+void idPhysics_Player::GetSkimmmingDir( idVec3 &skimDir_forward, idVec3 &skimDir_right ){
+	skimDir_forward = skimmingDir_forward;
+	skimDir_right = skimmingDir_right;
+	return;
+}
+
+/*
+================
+idPhysics_Player::StartSkim
+================
+starts the skim state in a specified initial phase
+*/
+void idPhysics_Player::StartSkim( void ) {
+	if ( debugLevel ) {
+		gameLocal.Printf( "we start the skim motion!\n" );
+	}
+	idealFrictionMultiplier = pm_skim_min_friction.GetFloat(); // that's the point of the whole skim system
+	currentFrictionMultiplier = idealFrictionMultiplier;
+
+	skimmingDir_forward = movementFlow;
+	skimmingDir_forward.Normalize();
+	skimmingDir_right = -groundTrace.c.normal.Cross( skimmingDir_forward );
+	skimmingDir_right.Normalize();
+	skimmingDir_up = groundTrace.c.normal;
+
+	skimPhase = SkimmingStart;
+}
+
+/*
+================
+idPhysics_Player::CancelSkim
+================
+advances the skim state to the end phase ( eventually ending it, but ending it well )
+*/
+void idPhysics_Player::CancelSkim( void ) {
+	if ( debugLevel ) {
+		gameLocal.Printf("Skim motion canceled!\n");
+	}
+	if ( ( current.movementFlags & PMF_SKIMMED ) && ( skimPhase != noSkimming ) ) {
+		skimPhase = SkimmingCancel;
+	}
+}
+
+/*
+================
+idPhysics_Player::UpdateSkimFSM
+================
+that's the meat of the system, it's an FSM ( Finite State Machine )
+*/
+void idPhysics_Player::UpdateSkimFSM( void ) {
+	idPlayer* player = static_cast<idPlayer*>(self);
+
+	//we use a while because we're making a finite state machine here, every "phase" is a state of the FSM.
+	while ( true ) {
+		if ( skimPhase == SkimmingStart ) {
+			if ( debugLevel ) {
+				if ( skimPhase != lastSkimPhaseIteration ) {
+					lastSkimPhaseIteration = SkimmingStart;
+					gameLocal.Printf("SkimmingStart status!\n");
+				}
+			}
+			player->LowerWeapon();
+			skim_move_iterations = 0;
+			//play landing sound
+			//start the skimming particles
+			//start skimming sound
+			skimPhase = SkimmingMovement;
+			break;
+		} else if ( skimPhase == SkimmingMovement ) {
+			if ( debugLevel ) {
+				if ( skimPhase != lastSkimPhaseIteration ) {
+					lastSkimPhaseIteration = SkimmingMovement;
+					gameLocal.Printf("SkimmingMovement status!\n");
+				}
+			}
+			if ( current.movementType == PM_DEAD ) {
+				idPhysics_Player::CancelSkim();
+				break;
+			}
+			if ( CheckSkimHit() ) {
+				skimPhase = SkimmingHit;
+				break;
+			}
+			if ( !DoWekeepSkimming() ) {
+				skimPhase = SkimmingEnd;
+				break;
+			}
+			break;
+		} else if ( skimPhase == SkimmingHit ) {
+			if ( debugLevel ) {
+				if ( skimPhase != lastSkimPhaseIteration ) {
+					lastSkimPhaseIteration = SkimmingHit;
+					gameLocal.Printf("SkimmingHit status!\n");
+				}
+			}
+			//stop the movement
+			currentFrictionMultiplier = 1.0;
+			idealFrictionMultiplier = 1.0;
+			//check if we get damage
+				//if so get hurt
+			//check if we produce damage
+				//if so make pain
+			//make the hit sound
+			skimPhase = SkimmingEnd;
+			break;
+		} else if ( skimPhase == SkimmingCancel ) {
+			if ( debugLevel ) {
+				if ( skimPhase != lastSkimPhaseIteration ) {
+					lastSkimPhaseIteration = SkimmingCancel;
+					gameLocal.Printf("SkimmingCancel status!\n");
+				}
+			}
+			currentFrictionMultiplier = 1.0;
+			idealFrictionMultiplier = 1.0;
+			//idPhysics_Player::CheckJump();
+			idPhysics_Player::CheckDuck();
+			player->RaiseWeapon();
+			skimPhase = noSkimming;
+			break;
+		} else if ( skimPhase == SkimmingEnd ){
+			if ( debugLevel ) {
+				if ( skimPhase != lastSkimPhaseIteration ) {
+					lastSkimPhaseIteration = SkimmingEnd;
+					gameLocal.Printf("SkimmingEnd status!\n");
+				}
+			}
+			currentFrictionMultiplier = 1.0;
+			idealFrictionMultiplier = 1.0;
+			//stop the skimming particles
+			//stop the skimming sound
+			player->RaiseWeapon();
+			idPhysics_Player::CheckDuck(); // we we end up in any of the stances we want not a predefined one
+			skimPhase = noSkimming;
+			break;
+		} else {
+			if ( debugLevel ) {
+				if ( skimPhase != lastSkimPhaseIteration ) {
+					lastSkimPhaseIteration = noSkimming;
+					gameLocal.Printf("noSkimming status!\n");
+				}
+			}
+			idealFrictionMultiplier = 1.0f;
+			currentFrictionMultiplier = 1.0f;
+			break;
+		}
+	} // end while
+}
+
+/*
+================
+idPhysics_Player::SkimMove
+================
+*/
+void idPhysics_Player::SkimMove() {
+	/*
+	 * if we press between 10.0f and 50.0f we slide sideways
+	 * if we press further than 30.f we add ideal friction ( until we get to 1.0 ) until we reach 50.0 f were we cancel skimming
+	 * if we bump on something get to hit situation
+	 * keep sliding forth
+	 */
+	idVec3		wishvel, wishdir, oldVelocity, vel;
+	float		wishspeed, scale, accelerate, oldVel, newVel; //, dyn_ideal_fric, dot_product_normalized, range;
+
+	if ( idPhysics_Player::CheckJump() ) {
+		// jumped away
+		idPhysics_Player::AirMove();
+		return;
+	}
+
+	skim_move_iterations++;
+
+	//float cos30 = idMath::Cos( 30 );
+	//float cos50 = idMath::Cos( 50 );
+	if ( groundPlane ) {
+		if( ( skimmingDir_up * groundTrace.c.normal ) != 1.0f ) { // if the inclination of the ground has changed
+			if ( debugLevel ) {
+				gameLocal.Printf("retracing all SkimmingDir vectors because the ground normal has changed!\n");
+			}
+			idPhysics_Player::CorrectDir( groundTrace.c.normal, skimmingDir_up, skimmingDir_up, skimmingDir_forward, skimmingDir_right ); // retrace all SkimmingDir vectors
+		}
+	} else {
+		if( ( skimmingDir_up * -gravityNormal ) != 1.0f ) {
+			if ( debugLevel ) {
+				gameLocal.Printf("retracing all SkimmingDir vectors because there is no ground!\n");
+			}
+			idPhysics_Player::CorrectDir( -gravityNormal, skimmingDir_up, skimmingDir_up, skimmingDir_forward, skimmingDir_right ); // retrace all SkimmingDir vectors
+		}
+	}
+
+	idPhysics_Player::Friction();
+
+	scale = idPhysics_Player::CmdScale( command );
+
+	// project moves down to flat plane
+	viewForward -= (viewForward * gravityNormal) * gravityNormal;
+	viewRight -= (viewRight * gravityNormal) * gravityNormal;
+
+	// project the forward and right directions onto the ground plane
+	viewForward.ProjectOntoPlane( groundTrace.c.normal, OVERCLIP );
+	viewRight.ProjectOntoPlane( groundTrace.c.normal, OVERCLIP );
+	//
+	viewForward.Normalize();
+	viewRight.Normalize();
+
+	//wishvel = viewForward * command.forwardmove + viewRight * command.rightmove;
+	idVec3 	traced_control = viewForward * command.forwardmove + viewRight * command.rightmove;
+	if ( ( skimmingDir_up * -gravityNormal ) != 1.0f ) {
+		traced_control.ProjectOntoPlane( skimmingDir_up, OVERCLIP );
+	}
+	traced_control.Normalize();
+	float dot_right = skimmingDir_right * traced_control;
+	wishvel = ( viewRight * command.rightmove ) * dot_right;
+	wishdir = wishvel;
+	wishspeed = wishdir.Normalize();
+	wishspeed *= scale;
+
+	// everything related to friction:
+	/*
+	//from 0 to 30 degrees of control versus direction of skimming we have pm_skim_min_friction as ideal friction;
+	//from 30 to 50 degrees we add incrementally more ideal friction, starting from pm_skim_min_friction until 1.0f;
+	//between 50 and 90 degrees idela friction is 1.0f, 90 degrees or more we cancel skimming
+	if ( aligned == 0 ) {
+					gameLocal.Printf( "there is further deviation of 20 degrees to forward!\n" );
+				} else {
+					gameLocal.Printf( "control_dir is 0.0f in length!\n" );
+				}
+	idVec3 controlFlow = idPhysics_Player::GetHorizontalControlFlow();
+	controlFlow.Normalize();
+	float skim_dot_control = skimmingDir_forward * controlFlow; //aligned 1.0 - perpendicular 0.0f
+	//not using CheckVecAligned for a better understanding of the procedure..
+	if ( !( skim_dot_control >= cos30 ) && ( skim_dot_control >= cos50 ) ) { //...so we understand what is going on!
+		dot_product_normalized = math::MinNormalizeMax( skimmingDir_forward * controlFlow, cos50, cos30 );
+		range = cos30 - cos50; //we want it as an absolute value
+		dyn_ideal_fric = ( range * dot_product_normalized ) + pm_skim_min_friction.GetFloat();
+		if ( dyn_ideal_fric > 1.0f ) {
+			dyn_ideal_fric = 1.0f; // don't ever pass from 1.0f
+		}
+		//this only adds friction it never subtracts it back to frictionless motion
+		if ( idealFrictionMultiplier < dyn_ideal_fric ) {
+
+			idealFrictionMultiplier = dyn_ideal_fric;
+		}
+	} else if ( ( skim_dot_control < cos50 ) && ( skim_dot_control > 0.0f ) ) { // between 50 and 90 degrees
+		idealFrictionMultiplier = 1.0f;
+	} else if ( skim_dot_control <= 0.0f ) { // that's 90 degrees or more
+		idealFrictionMultiplier = 1.0f;
+		//if ( debugLevel ) {
+			//gameLocal.Printf("skimMove: CancelSkim!\n");
+		//}
+		//idPhysics_Player::CancelSkim(); // <---- yeah this is right: outright kill the skim motion!
+	} else { // less than 30 degrees
+		idealFrictionMultiplier = pm_skim_min_friction.GetFloat();
+	}*/
+	// friction stuff end
+
+	// when a player gets hit, they temporarily lose full control, which allows them to be moved a bit
+	if ( ( groundMaterial && ( groundMaterial->GetSurfaceFlags() & SURF_SLICK ) ) || ( current.movementFlags & PMF_TIME_KNOCKBACK ) ) {
+		accelerate = PM_AIRACCELERATE;
+	} else {
+		accelerate = PM_ACCELERATE;
+	}
+
+	idPhysics_Player::Accelerate( skimmingDir_forward, wishspeed, accelerate );
+
+	if ( ( groundMaterial && ( groundMaterial->GetSurfaceFlags() & SURF_SLICK ) ) || ( current.movementFlags & PMF_TIME_KNOCKBACK ) ) {
+		current.velocity += gravityVector * frametime;
+	}
+	idPhysics_Player::Friction();
+
+	oldVelocity = current.velocity;
+
+	// slide along the ground plane
+	current.velocity.ProjectOntoPlane( groundTrace.c.normal, OVERCLIP );
+	//if ( debugLevel ) {
+		//gameLocal.Printf( "%i:allsolid\n", c_pmove );
+	//}
+	// if not clipped into the opposite direction
+	if ( oldVelocity * current.velocity > 0.0f ) {
+		newVel = current.velocity.LengthSqr();
+		if ( newVel > 1.0f ) {
+			oldVel = oldVelocity.LengthSqr();
+			if ( oldVel > 1.0f ) {
+				// don't decrease velocity when going up or down a slope
+				current.velocity *= idMath::Sqrt( oldVel / newVel );
+			}
+		}
+	}
+
+	// don't do anything if standing stillidVec3	visual_origin = current.origin + ( p_dirForward * pm_walkspeed.GetFloat() ) + ( gravityNormal * -8 ) + ( viewRight * 24 );
+	vel = current.velocity - (current.velocity * gravityNormal) * gravityNormal;
+	if ( !vel.LengthSqr() ) {
+		return;
+	}
+
+	gameLocal.push.InitSavingPushedEntityPositions();
+
+	idPhysics_Player::SlideMove( false, true, true, true );
+	/*
+	if ( debugLevel ) {
+			idVec3 	p_dirForward = -gravityNormal.Cross( viewRight );
+			p_dirForward.Normalize();
+
+			idVec3	visual_origin = current.origin + ( p_dirForward * pm_walkspeed.GetFloat() ) + ( gravityNormal * -8 ) + ( viewRight * 24 );
+			idVec3	visual_origin2 = current.origin + ( p_dirForward * pm_walkspeed.GetFloat() ) + ( gravityNormal * -8 ) + ( viewRight * 28 );
+			idVec3	Text_indent = idVec3 ( 0.0, 0.0, 4.0 );
+			float	idealfric = idPhysics_Player::MinNormalizeMax( idealFrictionMultiplier, 1.0, pm_skim_min_friction.GetFloat() );
+			float	currentfric = idPhysics_Player::MinNormalizeMax( currentFrictionMultiplier, 1.0, pm_skim_min_friction.GetFloat() );
+			idVec3  destine = visual_origin + ( gravityNormal * idealfric * -64 );
+			idVec3  destine2 = visual_origin2 + ( gravityNormal * currentfric * -64 );
+			idVec3  max_destine = visual_origin + ( gravityNormal * -64 );
+			idVec3  max_destine2 = visual_origin2 + ( gravityNormal * -64 );
+			idVec3	text_pos = destine + Text_indent;
+			idVec3	text_pos2 = destine2 + Text_indent;
+
+			idVec4 	c_magenta	= idVec4( 1.0, 0.0, 1.0, 1.0 );
+			idVec4 	c_magenta_dark	= idVec4( 0.25, 0.0, 0.25, 1.0 );
+
+			gameRenderWorld->DebugLine( c_magenta_dark, visual_origin, max_destine, 0, false );
+			gameRenderWorld->DebugArrow( c_magenta, visual_origin, destine, 8, 0 );
+			gameRenderWorld->DrawText( "idealFrictionMultiplier", text_pos, 0.15, c_magenta, clipModelAxis, 0, 0, false );
+
+			gameRenderWorld->DebugLine( c_magenta_dark, visual_origin2, max_destine2, 0, false );
+			gameRenderWorld->DebugArrow( c_magenta, visual_origin2, destine2, 8, 0 );
+			gameRenderWorld->DrawText( "currentFrictionMultiplier", text_pos2, 0.15, c_magenta, clipModelAxis, 0, 0, false );
+	}
+	*/
+	if ( debugLevel ) {
+		gameLocal.Printf( "SkimMove %i: movementFlow is: %f\n", skim_move_iterations, movementFlow.Length() );
 	}
 }

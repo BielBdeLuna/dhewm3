@@ -199,6 +199,11 @@ extern idCVar	pm_thirdPersonDeath;
 extern idCVar	pm_modelView;
 extern idCVar	pm_airTics;
 
+extern idCVar 	pm_skimming;
+extern idCVar	pm_skim_min_friction;
+extern idCVar	pm_skim_height;
+extern idCVar	pm_skim_viewheight;
+
 extern idCVar	g_showPlayerShadow;
 extern idCVar	g_showHud;
 extern idCVar	g_showProjectilePct;

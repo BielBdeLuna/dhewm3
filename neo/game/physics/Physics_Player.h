@@ -51,6 +51,16 @@ typedef enum {
 	PM_NOCLIP				// flying without collision detection nor gravity
 } pmtype_t;
 
+enum SkimmingPhase {
+	noSkimming = 0,
+	SkimmingStart,
+	SkimmingMovement,
+	SkimmingHit,
+	SkimmingCancel,
+	SkimmingEnd,
+	NumSkimmingPhases,
+};
+
 typedef enum {
 	WATERLEVEL_NONE,
 	WATERLEVEL_FEET,
@@ -132,6 +142,31 @@ public:	// common physics interface
 	void					WriteToSnapshot( idBitMsgDelta &msg ) const;
 	void					ReadFromSnapshot( const idBitMsgDelta &msg );
 
+	bool					IsSkimming( void );
+	void					GetSkimmmingDir( idVec3 &skimDir_forward, idVec3 &skimDir_right );
+	void					CancelSkim( void );
+
+protected:
+	idVec3					movementFlow; //normal of the current movement and length of the speed
+	idVec3					lastMovementFlow; //used for detecting heavy turning rate
+	idVec3					GetHorizontalControlFlow( void );
+	idVec3					GetVerticalControlFlow( void );
+
+	void					StartSkim( void );
+
+	SkimmingPhase 			skimPhase;
+	SkimmingPhase			lastSkimPhaseIteration; //this should be useful for not repeating the same messages over and over
+
+	float					idealFrictionMultiplier;
+	float					currentFrictionMultiplier;
+
+	idVec3 					skimmingDir_forward; // the direction of the skimming motion
+	idVec3					skimmingDir_right;
+	idVec3					skimmingDir_up;
+	void					CorrectDir( idVec3 new_up, idVec3 old_up, idVec3 &dir_up, idVec3 &dir_forward, idVec3 &dir_right );
+
+	void					UpdateSkimFSM( void );
+
 private:
 	// player physics state
 	playerPState_t			current;
@@ -192,6 +227,17 @@ private:
 	void					SetWaterLevel( void );
 	void					DropTimers( void );
 	void					MovePlayer( int msec );
+
+	bool					elegibleForSkim;
+	bool 					EligibleToSkim( void ); //test when not crouching
+	bool					DoWeSkim( void ); // definitive text when crouching
+	bool					DoWekeepSkimming( void );
+	bool 					CheckSkimHit( void );
+
+	int 					skim_move_iterations = 0;
+	void					SkimMove( void );
+
+	void 					DisplayDebugGraphics( void );
 };
 
 #endif /* !__PHYSICS_PLAYER_H__ */

@@ -270,6 +270,11 @@ idCVar pm_thirdPersonDeath(			"pm_thirdPersonDeath",		"0",			CVAR_GAME | CVAR_NE
 idCVar pm_modelView(				"pm_modelView",				"0",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_INTEGER, "draws camera from POV of player model (1 = always, 2 = when dead)", 0, 2, idCmdSystem::ArgCompletion_Integer<0,2> );
 idCVar pm_airTics(					"pm_air",					"1800",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_INTEGER, "how long in milliseconds the player can go without air before he starts taking damage" );
 
+idCVar pm_skimming(					"pm_skimming",				"1",			CVAR_GAME | CVAR_ARCHIVE | CVAR_BOOL, "allows the player to skim or not" );
+idCVar pm_skim_min_friction(		"pm_skim_min_friction", 	"0.075",		CVAR_GAME | CVAR_FLOAT,   "Amount by which the friction multiplies to when skim");
+idCVar pm_skim_height(				"pm_skim_height",			"30",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_FLOAT, "height of player's bounding box while skimming" );
+idCVar pm_skim_viewheight(			"pm_skim_viewheight",		"25",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_FLOAT, "height of player's view while skimming" );
+
 idCVar g_showPlayerShadow(			"g_showPlayerShadow",		"0",			CVAR_GAME | CVAR_ARCHIVE | CVAR_BOOL, "enables shadow of player model" );
 idCVar g_showHud(					"g_showHud",				"1",			CVAR_GAME | CVAR_ARCHIVE | CVAR_BOOL, "" );
 idCVar g_showProjectilePct(			"g_showProjectilePct",		"0",			CVAR_GAME | CVAR_ARCHIVE | CVAR_BOOL, "enables display of player hit percentage" );
