@@ -270,6 +270,7 @@ idCVar pm_thirdPersonDeath(			"pm_thirdPersonDeath",		"0",			CVAR_GAME | CVAR_NE
 idCVar pm_modelView(				"pm_modelView",				"0",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_INTEGER, "draws camera from POV of player model (1 = always, 2 = when dead)", 0, 2, idCmdSystem::ArgCompletion_Integer<0,2> );
 idCVar pm_airTics(					"pm_air",					"1800",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_INTEGER, "how long in milliseconds the player can go without air before he starts taking damage" );
 
+idCVar pm_mantling(					"pm_mantling", 				"1",			CVAR_GAME | CVAR_ARCHIVE | CVAR_BOOL, "allows the player to mantle or not" );
 idCVar pm_mantle_reach(				"pm_mantle_reach",			"0.5",			CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT, "Horizontal reach of mantle ability, as fraction of player height.  Default is 0.5" );
 idCVar pm_mantle_height(			"pm_mantle_height",			"0.2",			CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT, "Vertical reach of mantle ability, as fraction of player height.  Default is 0.2" );
 idCVar pm_mantle_minflatness(		"pm_mantle_minflatness",	"0.707",		CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT, "Cannot mantle on top of surfaces whose angle's cosine is smaller than this value. e.g. >1.0 means nothing can be mantled; 1.0 means only perfectly flat floors (0 degrees) can be mantled on top of; ~0.707 means no surfaces steeper than 45 degrees can be mantled on top of; 0.5 means no surfaces steeper than 60 degrees can be mantled on top of; a large negative value (like -10) means all surfaces can be mantled regardless of steepness. Default is 0.707." );
@@ -282,6 +283,14 @@ idCVar pm_mantle_pull_msecs(		"pm_mantle_pull_msecs",		"750",			CVAR_GAME | CVAR
 idCVar pm_mantle_shift_hands_msecs(	"pm_mantle_shift_hands_msecs","500",		CVAR_GAME | CVAR_INTEGER , "Milliseconds of time it takes for the player to shift their hands from pulling to pushing." );
 idCVar pm_mantle_push_msecs(		"pm_mantle_push_msecs",		"800",			CVAR_GAME | CVAR_INTEGER , "Milliseconds of time it takes for the player to push themselves up onto the mantle surface." );
 
+idCVar pm_dodging(					"pm_dodging",				"1",			CVAR_GAME | CVAR_ARCHIVE | CVAR_BOOL, "allows the player to double tap to dodge or not" );
+idCVar pm_dodge_power(				"pm_dodge_power", 			"550.0",		CVAR_GAME | CVAR_FLOAT,   "pushing force the player is subjected to when dodging");
+idCVar pm_dodge_height(				"pm_dodge_height", 			"300.0",		CVAR_GAME | CVAR_FLOAT,   "height the player will jump when dodging");
+
+idCVar pm_skimming(					"pm_skimming",				"1",			CVAR_GAME | CVAR_ARCHIVE | CVAR_BOOL, "allows the player to skim or not" );
+idCVar pm_skim_min_friction(		"pm_skim_min_friction", 	"0.075",		CVAR_GAME | CVAR_FLOAT,   "Amount by which the friction multiplies to when skim");
+idCVar pm_skim_height(				"pm_skim_height",			"30",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_FLOAT, "height of player's bounding box while skimming" );
+idCVar pm_skim_viewheight(			"pm_skim_viewheight",		"25",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_FLOAT, "height of player's view while skimming" );
 
 idCVar g_showPlayerShadow(			"g_showPlayerShadow",		"0",			CVAR_GAME | CVAR_ARCHIVE | CVAR_BOOL, "enables shadow of player model" );
 idCVar g_showHud(					"g_showHud",				"1",			CVAR_GAME | CVAR_ARCHIVE | CVAR_BOOL, "" );

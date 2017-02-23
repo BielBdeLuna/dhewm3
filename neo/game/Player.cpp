@@ -1277,6 +1277,9 @@ void idPlayer::Init( void ) {
 	legsForward	= true;
 	oldViewYaw = 0.0f;
 
+	p_skim_dir_forward.Zero();
+	p_skim_dir_right.Zero();
+
 	// set the pm_ cvars
 	if ( !gameLocal.isMultiplayer || gameLocal.isServer ) {
 		kv = spawnArgs.MatchPrefix( "pm_", NULL );
@@ -1725,6 +1728,9 @@ void idPlayer::Save( idSaveGame *savefile ) const {
 	savefile->WriteInt( landChange );
 	savefile->WriteInt( landTime );
 
+	savefile->WriteVec3( p_skim_dir_forward );
+	savefile->WriteVec3( p_skim_dir_right );
+
 	savefile->WriteInt( currentWeapon );
 	savefile->WriteInt( idealWeapon );
 	savefile->WriteInt( previousWeapon );
@@ -1956,6 +1962,9 @@ void idPlayer::Restore( idRestoreGame *savefile ) {
 	savefile->ReadVec3( viewBob );
 	savefile->ReadInt( landChange );
 	savefile->ReadInt( landTime );
+
+	savefile->ReadVec3( p_skim_dir_forward );
+	savefile->ReadVec3( p_skim_dir_right );
 
 	savefile->ReadInt( currentWeapon );
 	savefile->ReadInt( idealWeapon );
@@ -4080,8 +4089,10 @@ void idPlayer::SpectateFreeFly( bool force ) {
 		spectator = entityNumber;
 		if ( player && player != this && !player->spectating && !player->IsInTeleport() ) {
 			newOrig = player->GetPhysics()->GetOrigin();
-			if ( player->physicsObj.IsCrouching() ) {
+			if ( player->physicsObj.IsCrouching() && !physicsObj.IsSkimming( p_skim_dir_forward, p_skim_dir_right ) ) {
 				newOrig[ 2 ] += pm_crouchviewheight.GetFloat();
+			} else if ( player->physicsObj.IsSkimming( p_skim_dir_forward, p_skim_dir_right ) ) {
+				newOrig[ 2 ] += pm_skim_viewheight.GetFloat();
 			} else {
 				newOrig[ 2 ] += pm_normalviewheight.GetFloat();
 			}
@@ -5604,7 +5615,8 @@ void idPlayer::PerformImpulse( int impulse ) {
 		case IMPULSE_24: {
 			if ( gameLocal.isClient || entityNumber == gameLocal.localClientNum )
 			{
-				physicsObj.PerformMantle();
+				//physicsObj.PerformMantle();
+				physicsObj.PerformDodge( 1 );
 			}
 			break;
 		}
@@ -5979,11 +5991,16 @@ void idPlayer::Move( void ) {
 		newEyeOffset = 0.0f;
 	} else if ( health <= 0 ) {
 		newEyeOffset = pm_deadviewheight.GetFloat();
-	} else if ( physicsObj.IsCrouching() ) {
+	} else if ( physicsObj.IsCrouching() && !physicsObj.IsSkimming( p_skim_dir_forward, p_skim_dir_right ) ) {
+		//gameLocal.Printf("player: changing the view to crouch!\n");
 		newEyeOffset = pm_crouchviewheight.GetFloat();
 	} else if ( GetBindMaster() && GetBindMaster()->IsType( idAFEntity_Vehicle::Type ) ) {
 		newEyeOffset = 0.0f;
+	} else if ( physicsObj.IsSkimming( p_skim_dir_forward, p_skim_dir_right ) ) {
+		//gameLocal.Printf("player: changing the view to skim!\n");
+		newEyeOffset = pm_skim_viewheight.GetFloat();
 	} else {
+		//gameLocal.Printf("player: changing the view to normal!\n");
 		newEyeOffset = pm_normalviewheight.GetFloat();
 	}
 
@@ -6006,6 +6023,7 @@ void idPlayer::Move( void ) {
 		AI_ONGROUND	= physicsObj.HasGroundContacts();
 		AI_ONLADDER	= physicsObj.OnLadder();
 		AI_JUMP		= physicsObj.HasJumped();
+		//AI_SKIMMING = physicsObj.isSkimming( p_skim_dir_forward, p_skim_dir_right ); //TODO add the skimming motion
 
 		// check if we're standing on top of a monster and give a push if we are
 		idEntity *groundEnt = physicsObj.GetGroundEntity();

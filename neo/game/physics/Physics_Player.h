@@ -71,6 +71,16 @@ typedef struct playerPState_s {
 	int						movementTime;
 } playerPState_t;
 
+enum SkimmingPhase {
+	noSkimming = 0,
+	SkimmingStart,
+	SkimmingMovement,
+	SkimmingHit,
+	SkimmingCancel,
+	SkimmingEnd,
+	NumSkimmingPhases,
+};
+
 // This enumreation defines the phases of the mantling movement
 enum EMantlePhase
 {
@@ -140,7 +150,6 @@ public:	// common physics interface
 	void					ClearPushedVelocity( void );
 
 	void					SetMaster( idEntity *master, const bool orientated = true );
-
 	void					WriteToSnapshot( idBitMsgDelta &msg ) const;
 	void					ReadFromSnapshot( const idBitMsgDelta &msg );
 
@@ -151,13 +160,18 @@ public:	// common physics interface
 
 	// This method returns
 	// true if the player is mantling, false otherwise
-	bool IsMantling() const;
+	bool 					IsMantling() const;
 
 	// This returns the current mantling phase
-	EMantlePhase GetMantlePhase() const;
+	EMantlePhase 			GetMantlePhase() const;
 
 	// Cancels any current mantle
-	void CancelMantle();
+	void 					CancelMantle();
+
+	void					PerformDodge( bool dodge_right );
+
+	bool					IsSkimming( idVec3 &skimDir_forward, idVec3 &skimDir_right );
+	void					CancelSkim( void );
 
 protected:
 
@@ -241,7 +255,7 @@ protected:
 	* @param[in] forwardVec The vector gives the direction that the player is facing
 	* @param[out] out_trace This trace structure will hold the result of whichever trace succeeds. If both fail, the trace fraction will be 1.0
 	*/
-	void 					MantleTargetTrace ( float maxMantleTraceDistance,
+	void 					MantleTargetTrace ( float maxZmaxMantleTraceDistance,
 												const idVec3& eyePos,
 												const idVec3& forwardVec,
 												trace_t& out_trace
@@ -265,7 +279,7 @@ protected:
 	* @param[in] eyePos The position of the player's eyes (camera point) in the world coordinate system
 	* @param[in] in_targetTraceResult Pass in the trace result from MantleTargetTrace
 	* @param[out] out_mantleEndPoint If the return value is true, this passes back out what the player's origin will be at the end of the mantle
-	*
+	*i
 	* @returns the result of the test
 	* @retval true if the mantle target can be mantled
 	* @retval false if the mantle target cannot be mantled
@@ -349,6 +363,36 @@ protected:
 	bool 					CheckJumpHeldDown();
 
 
+	bool					DoWeDodge( void );
+
+	idVec3					movementFlow; //normal of the current movement and length of the speed
+	idVec3					lastMovementFlow; //used for detecting heavy turning rate
+
+	int						TestConeAlignment( idVec3 vec1, idVec3 vec2, float angle_threshold); //this should be in maths
+	float 					MinNormalizeMax( float number, float max, float min );
+
+	bool					elegibleForSkim;
+	float					nextSkimTime;
+	bool					AreWeTurning( float max_angle );
+	bool 					EligibleToSkim( void ); //test when not crouching
+	bool					DoWeSkim( void ); // definitive text when crouching
+	bool					DoWekeepSkimming( void );
+
+	int 					skim_move_iterations = 0;
+	void					StartSkim( void );
+
+	SkimmingPhase 			skimPhase;
+	SkimmingPhase			lastSkimPhaseIteration; //this should be useful for not repeating the same messages over and over
+	idVec3 					skimmingDir_forward; // the direction of the skimming motion
+	idVec3					skimmingDir_right;
+	idVec3					skimmingDir_up;
+	float					idealFrictionMultiplier;
+	float					currentFrictionMultiplier;
+
+	void					UpdateSkimFSM( void );
+	void					CorrectDir( idVec3 new_up, idVec3 old_up, idVec3 &dir_up, idVec3 &dir_forward, idVec3 &dir_right );
+	idVec3					GetControlFlow( void );
+
 private:
 	// player physics state
 	playerPState_t			current;
@@ -400,12 +444,14 @@ private:
 	void					NoclipMove( void );
 	void					SpectatorMove( void );
 	void					LadderMove( void );
+	void					SkimMove( void );
 	void					CorrectAllSolid( trace_t &trace, int contents );
 	void					CheckGround( void );
 	void					CheckDuck( void );
 	void					CheckLadder( void );
 	bool					CheckJump( void );
 	bool					CheckWaterJump( void );
+	bool					CheckSkimHit( void );
 	void					SetWaterLevel( void );
 	void					DropTimers( void );
 	void					MovePlayer( int msec );

@@ -210,6 +210,15 @@ extern idCVar 	pm_mantle_pull_msecs;
 extern idCVar 	pm_mantle_shift_hands_msecs;
 extern idCVar 	pm_mantle_push_msecs;
 
+extern idCVar 	pm_dodging;
+extern idCVar 	pm_dodge_power;
+extern idCVar 	pm_dodge_height;
+
+extern idCVar 	pm_skimming;
+extern idCVar	pm_skim_min_friction;
+extern idCVar	pm_skim_height;
+extern idCVar	pm_skim_viewheight;
+
 extern idCVar	g_showPlayerShadow;
 extern idCVar	g_showHud;
 extern idCVar	g_showProjectilePct;

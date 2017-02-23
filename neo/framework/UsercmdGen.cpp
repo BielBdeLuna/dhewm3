@@ -349,6 +349,7 @@ private:
 
 	bool			Inhibited( void );
 	void			AdjustAngles( void );
+	void			DoubleTap( void );
 	void			KeyMove( void );
 	void			JoystickMove( void );
 	void			MouseMove( void );
@@ -401,6 +402,14 @@ private:
 	static idCVar	m_smooth;
 	static idCVar	m_strafeSmooth;
 	static idCVar	m_showMouseRate;
+
+	static idCVar	in_doubleTap;
+	static idCVar	in_forceDoubleTap;
+
+	int				last_key;			// last key that was pressed
+	int				selected_key;		// key that has been pressed
+	int				double_tap_time; 	// time between taps
+	int				next_double_tap_chance_time;
 };
 
 idCVar idUsercmdGenLocal::in_yawSpeed( "in_yawspeed", "140", CVAR_SYSTEM | CVAR_ARCHIVE | CVAR_FLOAT, "yaw change speed when holding down _left or _right button" );
@@ -418,6 +427,9 @@ idCVar idUsercmdGenLocal::m_strafeScale( "m_strafeScale", "6.25", CVAR_SYSTEM | 
 idCVar idUsercmdGenLocal::m_smooth( "m_smooth", "1", CVAR_SYSTEM | CVAR_ARCHIVE | CVAR_INTEGER, "number of samples blended for mouse viewing", 1, 8, idCmdSystem::ArgCompletion_Integer<1,8> );
 idCVar idUsercmdGenLocal::m_strafeSmooth( "m_strafeSmooth", "4", CVAR_SYSTEM | CVAR_ARCHIVE | CVAR_INTEGER, "number of samples blended for mouse moving", 1, 8, idCmdSystem::ArgCompletion_Integer<1,8> );
 idCVar idUsercmdGenLocal::m_showMouseRate( "m_showMouseRate", "0", CVAR_SYSTEM | CVAR_BOOL, "shows mouse movement" );
+
+idCVar idUsercmdGenLocal::in_doubleTap( "in_doubleTap", "1", CVAR_SYSTEM | CVAR_ARCHIVE | CVAR_BOOL, "allow the double tap flag" );
+idCVar idUsercmdGenLocal::in_forceDoubleTap( "in_forceDoubleTap", "0", CVAR_SYSTEM | CVAR_BOOL, "rises the double tap flag, as a debug method, without any actual double tapping going on" );
 
 static idUsercmdGenLocal localUsercmdGen;
 idUsercmdGen	*usercmdGen = &localUsercmdGen;
@@ -546,6 +558,49 @@ void idUsercmdGenLocal::AdjustAngles( void ) {
 	viewangles[PITCH] += speed * in_pitchSpeed.GetFloat() * ButtonState( UB_LOOKDOWN );
 }
 
+void idUsercmdGenLocal::DoubleTap( void ) {
+	// the double tap feature for left / right keys, TODO generalize with a method that serves all keys and buttons
+	// only serves a single dobule tap motion
+
+	//if ( ( idUsercmdGenLocal::in_doubleTap.getBool() ) && ( cmd.flags && !UCF_DOUBLE_TAP ) ) {
+	//if ( cmd.flags & !UCF_DOUBLE_TAP ) {
+		int cur_time = Sys_Milliseconds()
+
+		if ( ( ButtonState( UB_RIGHT ) <= 0 ) && ( ButtonState( UB_LEFT ) <= 0 ) ) {
+			last_key = selected_key;
+			selected_key = -2;
+			double_tap_time = cur_time + 750; // let not last more than that time before making the next tap
+		} else {
+			//pressing the two keys always waste the chance!
+			last_key = -1;
+			selected_key = -2;
+			double_tap_time = 0;
+			next_double_tap_chance_time = 0;
+			common->Printf( "pressed both" );
+		}
+
+		if ( ( ButtonState( UB_RIGHT ) > 0 ) && ( ButtonState( UB_LEFT ) <= 0 ) ) {
+			if ( selected_key == UB_LEFT ) {
+				last_key = -1;
+			}
+			selected_key = UB_RIGHT;+
+			common->Printf( "pressed right" );
+		} else if ( ( ButtonState( UB_LEFT ) > 0 ) && ( ButtonState( UB_RIGHT ) <= 0 ) ) {
+			if ( selected_key == UB_RIGHT ) {
+				last_key = -1;
+			}
+			selected_key = UB_LEFT;
+			common->Printf( "pressed left" );
+		}
+
+		if ( ( selected_key == last_key ) && ( cur_time < double_tap_time ) && ( cur_time >= next_double_tap_chance_time ) ) {
+			cmd.flags ^= UCF_DOUBLE_TAP;
+			common->Printf( "double Tap" );
+			next_double_tap_chance_time = cur_time + 1500;
+		}
+	//}
+}
+
 /*
 ================
 idUsercmdGenLocal::KeyMove
@@ -576,6 +631,7 @@ void idUsercmdGenLocal::KeyMove( void ) {
 	cmd.forwardmove = idMath::ClampChar( forward );
 	cmd.rightmove = idMath::ClampChar( side );
 	cmd.upmove = idMath::ClampChar( up );
+
 }
 
 /*
@@ -708,7 +764,7 @@ void idUsercmdGenLocal::CmdButtons( void ) {
 	cmd.buttons = 0;
 
 	// figure button bits
-	for (i = 0 ; i <= 7 ; i++) {
+	for (i = 0 ; i <= 7 ; i++) {common
 		if ( ButtonState( (usercmdButton_t)( UB_BUTTON0 + i ) ) ) {
 			cmd.buttons |= 1 << i;
 		}
@@ -790,6 +846,9 @@ void idUsercmdGenLocal::MakeCurrent( void ) {
 		// get basic movement from joystick
 		JoystickMove();
 
+		//calc the double tap
+		DoubleTap();
+
 		// check to make sure the angles haven't wrapped
 		if ( viewangles[PITCH] - oldAngles[PITCH] > 90 ) {
 			viewangles[PITCH] = oldAngles[PITCH] + 90;
@@ -849,6 +908,10 @@ idUsercmdGenLocal::InitForNewMap
 void idUsercmdGenLocal::InitForNewMap( void ) {
 	flags = 0;
 	impulse = 0;
+	last_key = -1;
+	selected_key = -2;
+	double_tap_time = 0;
+	next_double_tap_chance_time = 0;
 
 	toggled_crouch.Clear();
 	toggled_run.Clear();
@@ -971,7 +1034,7 @@ void idUsercmdGenLocal::Mouse( void ) {
 	if ( numEvents ) {
 		//
 		// Study each of the buffer elements and process them.
-		//
+		//DoubleTap
 		for( i = 0; i < numEvents; i++ ) {
 			int action, value;
 			if ( Sys_ReturnMouseInputEvent( i, action, value ) ) {

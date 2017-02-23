@@ -549,6 +549,9 @@ private:
 	int						landChange;
 	int						landTime;
 
+	idVec3					p_skim_dir_forward;
+	idVec3					p_skim_dir_right;
+
 	int						currentWeapon;
 	int						idealWeapon;
 	int						previousWeapon;

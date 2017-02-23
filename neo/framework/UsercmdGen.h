@@ -85,6 +85,7 @@ const int IMPULSE_40			= 40;			// use vehicle
 
 // usercmd_t->flags
 const int UCF_IMPULSE_SEQUENCE	= 0x0001;		// toggled every time an impulse command is sent
+const int UCF_DOUBLE_TAP		= 0x0010;		// toggled every time a double tap happens, reset after the action is done.
 
 class usercmd_t {
 public:
@@ -163,6 +164,7 @@ public:
 
 	// Directly sample a usercmd.
 	virtual usercmd_t	GetDirectUsercmd( void ) = 0;
+
 };
 
 extern idUsercmdGen	*usercmdGen;
