@@ -29,6 +29,7 @@ If you have questions concerning this license or the applicable additional terms
 #include "sys/platform.h"
 #include "script/Script_Thread.h"
 #include "Player.h"
+#include "idlib/math/blMathUtils.h"
 
 #include "Trigger.h"
 
@@ -1189,4 +1190,167 @@ idTrigger_Touch::Disable
 */
 void idTrigger_Touch::Disable( void ) {
 	BecomeInactive( TH_THINK );
+}
+
+
+/*
+===============================================================================
+
+  blTrigger_Push
+
+===============================================================================
+*/
+
+CLASS_DECLARATION( idTrigger, blTrigger_Push )
+	EVENT( EV_Activate,		blTrigger_Push::Event_Trigger )
+	EVENT( EV_Touch,		blTrigger_Push::Event_Touch )
+END_CLASS
+
+/*
+================
+idTrigger_Multi::idTrigger_Multi
+================
+*/
+blTrigger_Push::blTrigger_Push( void ) {
+	deactivated = false;
+	max_height 	= 0.0f;
+	time_to_ls	= 0.0f;
+	landing_spot = NULL;
+}
+
+/*
+================
+idTrigger_Multi::Save
+================
+*/
+void blTrigger_Push::Save( idSaveGame *savefile ) {
+	savefile->WriteFloat( max_height );
+	savefile->WriteFloat( time_to_ls );
+	savefile->WriteBool( deactivated );
+	savefile->WriteObject( landing_spot );
+}
+
+/*
+================
+idTrigger_Multi::Restore
+================
+*/
+void blTrigger_Push::Restore( idRestoreGame *savefile ) {
+	savefile->ReadFloat( max_height );
+	savefile->ReadFloat( time_to_ls );
+	savefile->ReadBool( deactivated );
+	savefile->ReadObject( reinterpret_cast<idClass *&>( landing_spot ) );
+}
+
+/*
+================
+blTrigger_Push::Spawn
+================
+*/
+
+void blTrigger_Push::Spawn( void ) {
+	idVec3 ls_org, ths_org, grav;
+	if ( spawnArgs.MatchPrefix( "target" ) ) {
+		FindTargets();
+	} else {
+		gameLocal.Error( "Push Entity '%s' doesn't have any target.", name.c_str() );
+	}
+
+	if ( targets.Num() > 1 ) {
+		gameLocal.Error( "Push Entity '%s' has too many targets.", name.c_str() );
+	}
+
+	if ( spawnArgs.MatchPrefix( "time" ) ) {
+		if ( spawnArgs.MatchPrefix( "max_height" ) ) {
+			gameLocal.Error( "Push Entity '%s' has both time and max_height set, both are incompatible!", name.c_str() );
+		} else {
+			time_to_ls = spawnArgs.GetFloat( "time" );
+		}
+	} else {
+		if ( spawnArgs.MatchPrefix( "max_height" ) ) {
+			max_height = spawnArgs.GetFloat( "max_height" );
+		} else {
+			gameLocal.Error( "Push Entity '%s' doesn't have any time or max_height specified!\nso it can't calculate the impulse for the player!", name.c_str() );
+		}
+	}
+
+	if ( spawnArgs.MatchPrefix( "start_off" ) ) {
+		deactivated = spawnArgs.GetBool( "start_off" );
+	} else {
+		deactivated = false;
+	}
+
+	landing_spot = targets[0].GetEntity();
+	/*
+	ls_org = landing_spot->GetPhysics()->GetOrigin();
+	ths_org = this->GetPhysics()->GetOrigin();
+	grav = this->GetPhysics()->GetGravity();
+
+	Velocity = blMathUtils::TimedBallistics( Time, ths_org, ls_org, grav );
+	*/
+	/*
+	max_height = spawnArgs.GetInt( "max_height" );
+
+	landing_spot = targets[0].GetEntity();
+	ls_org = landing_spot->GetPhysics()->GetOrigin();
+	ths_org = this->GetPhysics()->GetOrigin();
+	axis = ls_org - ths_org;
+
+	if ( axis[2] >= 0 ) {
+		//lower is the start
+	} else {
+		//lower is the end
+	}
+
+	y = 0.5*g*t*t + voy*t
+	vy = g*t + voy
+	voy = -g*t + vy
+
+	y = 0.5*g*t*t +( -g*t + vy ) * t
+	y = 0.5*g*t*t -g*t*t
+	y = -0.5*g*t*t
+	t * t = 2y / g
+	t = sqrt( 2y / g )
+
+	if ( blMathUtils::Ballistics( ths_org, ls_org, 0, float gravity, ballistics_t bal[2] ) == 0 ){
+		//error
+	}
+	*/
+
+
+}
+
+/*
+================
+blTrigger_Push::Event_Trigger
+================
+*/
+void blTrigger_Push::Event_Trigger( idEntity *activator ) {
+	if ( deactivated ) {
+		deactivated = false;
+	} else{
+		deactivated = true;
+	}
+}
+/*
+================
+blTrigger_Push::Event_Touch
+================
+*/
+void blTrigger_Push::Event_Touch( idEntity *other, trace_t *trace ) {
+	if ( !deactivated ) {
+		idVec3 ls_org, ths_org, grav;
+
+		ls_org = landing_spot->GetPhysics()->GetOrigin();
+		ths_org = this->GetPhysics()->GetOrigin();
+		grav = this->GetPhysics()->GetGravity();
+
+		if ( spawnArgs.MatchPrefix( "time" ) ) {
+			push_vel = blMathUtils::TimedBallistics( time_to_ls, ths_org, ls_org, grav );
+		} else {
+			push_vel = blMathUtils::CappedAtBallistics( max_height, ths_org, ls_org, grav );
+		}
+
+		other->GetPhysics()->SetLinearVelocity( push_vel );
+	}
 }

@@ -274,6 +274,11 @@ idCVar pm_skimming(					"pm_skimming",				"1",			CVAR_GAME | CVAR_ARCHIVE | CVAR
 idCVar pm_skim_min_friction(		"pm_skim_min_friction", 	"0.075",		CVAR_GAME | CVAR_FLOAT,   "Amount by which the friction multiplies to when skim");
 idCVar pm_skim_height(				"pm_skim_height",			"30",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_FLOAT, "height of player's bounding box while skimming" );
 idCVar pm_skim_viewheight(			"pm_skim_viewheight",		"25",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_FLOAT, "height of player's view while skimming" );
+idCVar pm_skim_maxviewpitch(		"pm_skim_maxviewpitch",		"25",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_FLOAT, "amount player's view can look down while skimming" );
+idCVar pm_skim_maxviewyaw(			"pm_skim_maxviewyaw",		"120",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_FLOAT, "amount player's view can look to either side while skimming" );
+
+idCVar pm_showFirstPersonBody(		"pm_showFirstPersonBody", 	"1", 			CVAR_GAME | CVAR_NOCHEAT | CVAR_ARCHIVE | CVAR_BOOL, "whether we see the player model in first person or not" );
+idCVar pm_movementViewHeight(		"pm_movementViewHeight",	"64",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_FLOAT, "height of player's view while moving (running or jogging)" );
 
 idCVar g_showPlayerShadow(			"g_showPlayerShadow",		"0",			CVAR_GAME | CVAR_ARCHIVE | CVAR_BOOL, "enables shadow of player model" );
 idCVar g_showHud(					"g_showHud",				"1",			CVAR_GAME | CVAR_ARCHIVE | CVAR_BOOL, "" );

@@ -4,4 +4,4 @@ mkdir build
 cd build
 
 cmake -DD3XP=OFF -DCORE=OFF ../neo
-
+#cmake -DD3XP=OFF ../neo

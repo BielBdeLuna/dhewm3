@@ -146,6 +146,8 @@ public:	// common physics interface
 	void					GetSkimmmingDir( idVec3 &skimDir_forward, idVec3 &skimDir_right );
 	void					CancelSkim( void );
 
+	bool					isIdling( void );
+
 protected:
 	idVec3					movementFlow; //normal of the current movement and length of the speed
 	idVec3					lastMovementFlow; //used for detecting heavy turning rate

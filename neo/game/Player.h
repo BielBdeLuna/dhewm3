@@ -258,8 +258,6 @@ public:
 	idScriptBool			AI_TURN_RIGHT;
 	idScriptBool			AI_SKIMMING;
 	idScriptBool			AI_SKIMMING_STUCK;
-	idScriptBool			AI_SKIM_FORWARD;
-	idScriptBool			AI_SKIM_BACKWARD;
 
 	// inventory
 	idInventory				inventory;
@@ -643,6 +641,8 @@ private:
 	idPlayerIcon			playerIcon;
 
 	bool					selfSmooth;
+
+	void					DisplayGraphicDebugInfo( void );
 
 	void					LookAtKiller( idEntity *inflictor, idEntity *attacker );
 

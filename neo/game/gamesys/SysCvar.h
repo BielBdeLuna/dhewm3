@@ -203,6 +203,11 @@ extern idCVar 	pm_skimming;
 extern idCVar	pm_skim_min_friction;
 extern idCVar	pm_skim_height;
 extern idCVar	pm_skim_viewheight;
+extern idCVar	pm_skim_maxviewpitch;
+extern idCVar	pm_skim_maxviewyaw;
+
+extern idCVar	pm_showFirstPersonBody;
+extern idCVar 	pm_movementViewHeight;
 
 extern idCVar	g_showPlayerShadow;
 extern idCVar	g_showHud;

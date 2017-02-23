@@ -2703,7 +2703,7 @@ void idPhysics_Player::SkimMove() {
 				} else {
 					gameLocal.Printf( "control_dir is 0.0f in length!\n" );
 				}
-	idVec3 controlFlow = idPhysics_Player::GetHorizontalControlFlow();
+	idVec3 controlFlow = idPhysics_Player::GetHorizontalControlFlow();GetHorizontalControlFlow(
 	controlFlow.Normalize();
 	float skim_dot_control = skimmingDir_forward * controlFlow; //aligned 1.0 - perpendicular 0.0f
 	//not using CheckVecAligned for a better understanding of the procedure..
@@ -2806,4 +2806,20 @@ void idPhysics_Player::SkimMove() {
 	if ( debugLevel ) {
 		gameLocal.Printf( "SkimMove %i: movementFlow is: %f\n", skim_move_iterations, movementFlow.Length() );
 	}
+}
+
+/*
+================
+idPhysics_Player::isIdling
+================
+*/
+bool idPhysics_Player::isIdling() {
+	idVec3	wishvel;
+	while ( true ) {
+		if ( skimPhase != noSkimming ) { break; }
+		wishvel = GetHorizontalControlFlow();
+		if ( wishvel.Length() > 0.0f ) { break; }
+		return true;
+	}
+	return false;
 }

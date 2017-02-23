@@ -250,7 +250,10 @@ public:
 
 	CLASS_PROTOTYPE( idTrigger_Fade );
 
+	void				Spawn( void );
+
 private:
+	static idVec3		axis;
 	void				Event_Trigger( idEntity *activator );
 };
 
@@ -285,6 +288,37 @@ private:
 	idClipModel *		clipModel;
 
 	void				Event_Trigger( idEntity *activator );
+};
+
+/*
+===============================================================================
+
+blTrigger_Push
+
+===============================================================================
+*/
+
+class blTrigger_Push : public idTrigger {
+public:
+
+	CLASS_PROTOTYPE( blTrigger_Push );
+
+						blTrigger_Push( void );
+
+	void				Spawn( void );
+
+	void				Save( idSaveGame *savefile );
+	void				Restore( idRestoreGame *savefile );
+
+private:
+	idEntity* 			landing_spot;
+	float 				max_height;
+	float 				time_to_ls;
+	idVec3				push_vel;
+	bool				deactivated;
+	void				Event_Trigger( idEntity *activator );
+	void				Event_Touch( idEntity *other, trace_t *trace );
+
 };
 
 #endif /* !__GAME_TRIGGER_H__ */

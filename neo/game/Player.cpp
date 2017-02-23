@@ -1164,8 +1164,6 @@ void idPlayer::LinkScriptVariables( void ) {
 	AI_TURN_RIGHT.LinkTo(		scriptObject, "AI_TURN_RIGHT" );
 	AI_SKIMMING.LinkTo(			scriptObject, "AI_SKIMMING" );
 	AI_SKIMMING_STUCK.LinkTo(	scriptObject, "AI_SKIMMING_STUCK" );
-	AI_SKIM_FORWARD.LinkTo(		scriptObject, "AI_SKIM_FORWARD" );
-	AI_SKIM_BACKWARD.LinkTo(	scriptObject, "AI_SKIM_BACKWARD" );
 }
 
 /*
@@ -1381,8 +1379,6 @@ void idPlayer::Init( void ) {
 	AI_TURN_RIGHT	= false;
 	AI_SKIMMING			= false;
 	AI_SKIMMING_STUCK	= false;
-	AI_SKIM_FORWARD		= false;
-	AI_SKIM_BACKWARD	= false;
 
 	// reset the script object
 	ConstructScriptObject();
@@ -2694,8 +2690,6 @@ void idPlayer::EnterCinematic( void ) {
 	AI_TURN_RIGHT	= false;
 	AI_SKIMMING			= false;
 	AI_SKIMMING_STUCK	= false;
-	AI_SKIM_FORWARD		= false;
-	AI_SKIM_BACKWARD	= false;
 }
 
 /*
@@ -4105,6 +4099,8 @@ void idPlayer::SpectateFreeFly( bool force ) {
 				newOrig[ 2 ] += pm_crouchviewheight.GetFloat();
 			} else if ( player->physicsObj.IsSkimming() ) {
 				newOrig[ 2 ] += pm_skim_viewheight.GetFloat();
+			} else if ( !player->physicsObj.isIdling() ) {
+				newOrig[ 2 ] += pm_movementViewHeight.GetFloat();
 			} else {
 				newOrig[ 2 ] += pm_normalviewheight.GetFloat();
 			}
@@ -4935,13 +4931,47 @@ void idPlayer::UpdateViewAngles( void ) {
 		}
 	}
 
+	if ( physicsObj.IsSkimming() ) {
+
+		if ( viewAngles.pitch > pm_skim_maxviewpitch.GetFloat() ) {
+			viewAngles.pitch = pm_skim_maxviewpitch.GetFloat();
+		}
+
+		idAngles skimDir = p_skim_dir_forward.ToAngles();
+		float skimYawDelta = idMath::AngleDelta( skimDir.yaw, viewAngles.yaw );
+
+		gameLocal.Printf( "skimdir yaw is: %f, viewAngles yaw is: %f, skimYawDelta is: %f\n", skimDir.yaw, viewAngles.yaw, skimYawDelta );
+
+		if ( skimYawDelta > pm_skim_maxviewyaw.GetFloat() ) {
+			viewAngles.yaw = pm_skim_maxviewyaw.GetFloat();
+		} else if ( skimYawDelta < -pm_skim_maxviewyaw.GetFloat() ) {
+			viewAngles.yaw = -pm_skim_maxviewyaw.GetFloat();
+		}
+
+	}
+
 	UpdateDeltaViewAngles( viewAngles );
 
 	// orient the model towards the direction we're looking
-	SetAngles( idAngles( 0, viewAngles.yaw, 0 ) );
+	if ( physicsObj.IsSkimming() ) {
+		idAngles skimDir = p_skim_dir_forward.ToAngles();
+		SetAngles( idAngles( 0, skimDir.yaw, 0 ) );
+	} else {
+		SetAngles( idAngles( 0, viewAngles.yaw, 0 ) );
+	}
 
 	// save in the log for analyzing weapon angle offsets
 	loggedViewAngles[ gameLocal.framenum & (NUM_LOGGED_VIEW_ANGLES-1) ] = viewAngles;
+}
+
+/*
+==============
+idPlayer::DisplayGraphicDebugInfo
+display some helpful info
+==============
+*/
+void idPlayer::DisplayGraphicDebugInfo( void ) {
+	return;
 }
 
 /*
@@ -5818,6 +5848,19 @@ void idPlayer::AdjustBodyAngles( void ) {
 		blend = true;
 	}
 
+	if ( physicsObj.IsSkimming() ) {
+		idAngles skimDir = p_skim_dir_forward.ToAngles();
+		float skimYawDelta = idMath::AngleDelta( skimDir.yaw, viewAngles.yaw );
+
+		if ( skimYawDelta >= 0.0f ) {
+			AI_TURN_LEFT = true;
+			AI_TURN_RIGHT = false;
+		} else {
+			AI_TURN_LEFT = false;
+			AI_TURN_RIGHT = true;
+		}
+	}
+
 	if ( blend ) {
 		legsYaw = legsYaw * 0.9f + idealLegsYaw * 0.1f;
 	}
@@ -6003,6 +6046,8 @@ void idPlayer::Move( void ) {
 	} else if ( physicsObj.IsSkimming() ) {
 		//gameLocal.Printf("player: changing the view to skim!\n");
 		newEyeOffset = pm_skim_viewheight.GetFloat();
+	} else if ( !physicsObj.isIdling() ) {
+		newEyeOffset = pm_movementViewHeight.GetFloat();
 	} else {
 		//gameLocal.Printf("player: changing the view to normal!\n");
 		newEyeOffset = pm_normalviewheight.GetFloat();
@@ -6291,7 +6336,13 @@ void idPlayer::Think( void ) {
 		weapon.GetEntity()->SetPushVelocity( physicsObj.GetPushedLinearVelocity() );
 	}
 
+	if ( physicsObj.IsSkimming() ) {
+		physicsObj.GetSkimmmingDir( p_skim_dir_forward, p_skim_dir_right );
+	}
+
 	EvaluateControls();
+
+	idPlayer::DisplayGraphicDebugInfo();
 
 	if ( !af.IsActive() ) {
 		AdjustBodyAngles();
@@ -6378,6 +6429,34 @@ void idPlayer::Think( void ) {
 			headRenderEnt->customSkin = influenceSkin;
 		} else {
 			headRenderEnt->customSkin = NULL;
+		}
+	}
+
+	const char* skinname = spawnArgs.GetString( "spawn_skin" );
+	const char* skinname_fpb = spawnArgs.GetString( "fpb_skin" );
+
+	if ( pm_showFirstPersonBody.GetBool() && !pm_thirdPerson.GetBool() && !gameLocal.inCinematic ) {
+		if ( !idStr::Icmp( skinname, "skins/characters/player/tshirt_mp" ) ) {
+			SetSkin( declManager->FindSkin( "skins/characters/player/tshirt_mp_fpb" ) );
+		} else {
+			if ( !skinname ) {
+				SetSkin( declManager->FindSkin( "skins/characters/player/greenmarine_fpb" ) );
+			} else {
+				//gameLocal.Printf( "first person body skin is: %s\n", skinname_fpb );
+				SetSkin( declManager->FindSkin( skinname_fpb ) );
+			}
+		}
+	} else {
+		if ( !idStr::Icmp( skinname, "skins/characters/player/tshirt_mp" ) ) {
+			SetSkin( declManager->FindSkin( "skins/characters/player/tshirt_mp" ) );
+		} else {
+			if ( !skinname ) {
+				//the original doom3 skin for the player
+				SetSkin( declManager->FindSkin( "skins/characters/player/greenmarine" ) );
+			} else {
+				//gameLocal.Printf( "player skin is: %s\n", skinname );
+				SetSkin( declManager->FindSkin( skinname ) );
+			}
 		}
 	}
 
@@ -7381,6 +7460,11 @@ void idPlayer::CalculateRenderView( void ) {
 			// set the viewID to the clientNum + 1, so we can suppress the right player bodies and
 			// allow the right player view weapons
 			renderView->viewID = entityNumber + 1;
+			if ( pm_showFirstPersonBody.GetBool() ) {
+				renderEntity.suppressSurfaceInViewID = 0;
+			} else {
+				renderEntity.suppressSurfaceInViewID = entityNumber + 1;
+			}
 		}
 
 		// field of view
